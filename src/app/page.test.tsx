@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redirect } from "next/navigation";
@@ -270,6 +270,60 @@ describe("Home page", () => {
     );
     await renderHome({ type: "tv", genre: "37" });
     expect(screen.getByText("No series match this genre. Try another one, or show all series.")).toBeInTheDocument();
+  });
+});
+
+describe("Home page decade", () => {
+  it.each([true, false])("keeps the heading of / for ?decade=2010 (marquee %s)", async (marquee) => {
+    flags.marqueeHome = marquee;
+    stubTmdb();
+    await renderHome();
+    const plain = screen.getByRole("heading", { level: 1 }).textContent;
+    cleanup();
+    stubTmdb();
+    await renderHome({ decade: "2010" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(plain);
+    expect(plain).toBe("All titles");
+  });
+
+  it("asks TMDB for the decade's release dates, and its first air dates on TV", async () => {
+    let fetchMock = stubTmdb();
+    await renderHome({ decade: "2010" });
+    let params = discoverUrl(fetchMock).searchParams;
+    expect(params.get("primary_release_date.gte")).toBe("2010-01-01");
+    expect(params.get("primary_release_date.lte")).toBe("2019-12-31");
+    cleanup();
+    fetchMock = stubTmdb();
+    await renderHome({ type: "tv", decade: "2010" });
+    params = discoverUrl(fetchMock, "tv").searchParams;
+    expect(params.get("first_air_date.gte")).toBe("2010-01-01");
+    expect(params.get("first_air_date.lte")).toBe("2019-12-31");
+  });
+
+  it("keeps the decade in the sort, genre, Movies / TV, service, region and pagination links", async () => {
+    stubTmdb();
+    await renderHome({ decade: "2010", genre: "28", sort: "rating" });
+    const sort = screen.getByRole("navigation", { name: "Sort" });
+    expect(within(sort).getByRole("link", { name: "Title" })).toHaveAttribute("href", "/?genre=28&decade=2010&sort=title");
+    const genres = screen.getByRole("navigation", { name: "Genre" });
+    expect(within(genres).getByRole("link", { name: "All" })).toHaveAttribute("href", "/?decade=2010&sort=rating");
+    const media = screen.getByRole("navigation", { name: "Movies or TV" });
+    expect(within(media).getByRole("link", { name: "TV" })).toHaveAttribute("href", "/?type=tv&decade=2010&sort=rating");
+    const services = screen.getByRole("link", { name: "Netflix" });
+    expect(services).toHaveAttribute("href", "/?genre=28&providers=8&decade=2010&sort=rating");
+    const form = screen.getByRole("form", { name: "Region" });
+    const hidden = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')).map(({ name, value }) => [name, value]);
+    expect(hidden).toContainEqual(["decade", "2010"]);
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&decade=2010&sort=rating&page=2");
+  });
+
+  it.each(["1960", "abc", ""])("reads ?decade=%j as All and leaves it out of links", async (decade) => {
+    const fetchMock = stubTmdb();
+    await renderHome({ decade });
+    expect(discoverUrl(fetchMock).searchParams.has("primary_release_date.gte")).toBe(false);
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?page=2");
   });
 });
 

@@ -297,6 +297,38 @@ describe("discoverTitles", () => {
     expect(params.get("primary_release_date.lte")).toBe("2026-11-07");
     expect(params.get("vote_count.gte")).toBe("50");
   });
+
+  it("limits a decade to films released from its 1 January to its last 31 December", async () => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], decade: 2010 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("primary_release_date.gte")).toBe("2010-01-01");
+    expect(params.get("primary_release_date.lte")).toBe("2019-12-31");
+    expect(params.has("first_air_date.gte")).toBe(false);
+  });
+
+  it("sends no release date bounds for All", async () => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [] });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("primary_release_date.gte")).toBe(false);
+    expect(params.has("primary_release_date.lte")).toBe(false);
+  });
+
+  it.each([
+    [2010, "2010-01-01", "2019-12-31"],
+    [2020, "2020-01-01", "2026-11-07"],
+  ] as const)("with the release sort, caps the %i decade at the earlier of its end and today", async (decade, gte, lte) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T15:00:00Z"));
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "release", page: 1, region: "US", regionFromUrl: false, providers: [], decade });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("sort_by")).toBe("primary_release_date.desc");
+    expect(params.get("primary_release_date.gte")).toBe(gte);
+    expect(params.get("primary_release_date.lte")).toBe(lte);
+    expect(params.get("vote_count.gte")).toBe("50");
+  });
 });
 
 describe("discoverShows", () => {
@@ -362,6 +394,39 @@ describe("discoverShows", () => {
     expect(params.get("first_air_date.lte")).toBe("2026-11-07");
     expect(params.get("vote_count.gte")).toBe("50");
     expect(params.has("primary_release_date.lte")).toBe(false);
+  });
+
+  it("limits a decade to series first aired from its 1 January to its last 31 December", async () => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], decade: 2010 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("first_air_date.gte")).toBe("2010-01-01");
+    expect(params.get("first_air_date.lte")).toBe("2019-12-31");
+    expect(params.has("primary_release_date.gte")).toBe(false);
+    expect(params.has("primary_release_date.lte")).toBe(false);
+  });
+
+  it("sends no first air date bounds for All", async () => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [] });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("first_air_date.gte")).toBe(false);
+    expect(params.has("first_air_date.lte")).toBe(false);
+  });
+
+  it.each([
+    [1970, "1970-01-01", "1979-12-31"],
+    [2020, "2020-01-01", "2026-11-07"],
+  ] as const)("with the release sort, caps the %i decade at the earlier of its end and today", async (decade, gte, lte) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T15:00:00Z"));
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "release", page: 1, region: "US", regionFromUrl: false, providers: [], decade });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("sort_by")).toBe("first_air_date.desc");
+    expect(params.get("first_air_date.gte")).toBe(gte);
+    expect(params.get("first_air_date.lte")).toBe(lte);
+    expect(params.get("vote_count.gte")).toBe("50");
   });
 });
 

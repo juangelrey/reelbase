@@ -84,19 +84,23 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** The discover field for a title's release: the first air date for TV. */
+function releaseField(kind: TitleKind): string {
+  return kind === "tv" ? "first_air_date" : "primary_release_date";
+}
+
 /**
- * TMDB discover params per sort and kind. Release date skips unreleased titles and near-empty placeholder
- * entries; for TV it is the first air date, and the title sort is by name.
+ * TMDB discover params per sort and kind. Release date skips near-empty placeholder entries (its cap at today
+ * is in `releaseDateParams`); for TV it is the first air date, and the title sort is by name.
  */
 function sortParams(sort: SortKey, kind: TitleKind): TmdbParams {
-  const releaseField = kind === "tv" ? "first_air_date" : "primary_release_date";
   switch (sort) {
     case "popularity":
       return { sort_by: "popularity.desc" };
     case "rating":
       return { sort_by: "vote_average.desc", "vote_count.gte": 200 };
     case "release":
-      return { sort_by: `${releaseField}.desc`, [`${releaseField}.lte`]: today(), "vote_count.gte": 50 };
+      return { sort_by: `${releaseField(kind)}.desc`, "vote_count.gte": 50 };
     case "title":
       return { sort_by: kind === "tv" ? "name.asc" : "title.asc" };
   }
@@ -115,7 +119,26 @@ function providerParams({ providers, region }: BrowseState): TmdbParams {
   };
 }
 
-/** A page of movies by genre, service and sort. */
+/**
+ * The release date bounds, built in one place so the two upper bounds cannot overwrite each other: the decade
+ * keeps titles released from 1 January of its first year to 31 December of its last, and the release sort skips
+ * unreleased titles. With both, the earlier upper bound applies. None for All with any other sort.
+ */
+function releaseDateParams({ decade, sort }: BrowseState, kind: TitleKind): TmdbParams {
+  const field = releaseField(kind);
+  const params: TmdbParams = {};
+  const upperBounds: string[] = [];
+  if (decade !== undefined) {
+    params[`${field}.gte`] = `${decade}-01-01`;
+    upperBounds.push(`${decade + 9}-12-31`);
+  }
+  if (sort === "release") upperBounds.push(today());
+  // "YYYY-MM-DD" strings sort as dates do.
+  if (upperBounds.length > 0) params[`${field}.lte`] = upperBounds.sort()[0];
+  return params;
+}
+
+/** A page of movies by genre, service, decade and sort. */
 export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbMovieListItem>>("/discover/movie", {
@@ -124,11 +147,12 @@ export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSum
     ...providerParams(state),
     page,
     ...sortParams(sort, "movie"),
+    ...releaseDateParams(state, "movie"),
   });
   return toPaged(response, toSummary);
 }
 
-/** A page of TV series by TV genre, service and sort. */
+/** A page of TV series by TV genre, service, decade and sort. */
 export async function discoverShows(state: BrowseState): Promise<Paged<ShowSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbTvListItem>>("/discover/tv", {
@@ -137,6 +161,7 @@ export async function discoverShows(state: BrowseState): Promise<Paged<ShowSumma
     ...providerParams(state),
     page,
     ...sortParams(sort, "tv"),
+    ...releaseDateParams(state, "tv"),
   });
   return toPaged(response, toShowSummary);
 }
