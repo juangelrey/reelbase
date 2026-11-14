@@ -56,9 +56,12 @@ function deletedTestFiles(files) {
     .map((file) => ({ rule: "deleted-test-file", file: file.oldPath, line: null }));
 }
 
-// A case is an `it` or `test` call with any modifiers: `it.each(table)(...)` is one case, `describe` is none.
+// A case is an `it` or `test` call with any case modifiers: `it.each(table)(...)` is one case, `describe` is none.
+// Neither is a call that only starts with `test.`, such as `test.describe`, `test.step` or `test.beforeEach`, nor
+// a method named `test`, as in `regex.test(s)`.
 // A skipped case still counts, `xit` included, so a skip is reported as a skip only.
-const CASE = /\bx?(?:it|test)(?:\.\w+)*\s*[(`]/g;
+const CASE_MODIFIER = "each|for|only|skip|skipIf|runIf|concurrent|sequential|fails|fail|fixme|todo";
+const CASE = new RegExp(String.raw`(?<![.\w$])x?(?:it|test)(?:\.(?:${CASE_MODIFIER})\b)*\s*[(\`]`, "g");
 
 /** Counts the cases that start on these lines, leaving out commented lines. @param {{ text: string }[]} lines */
 function countCases(lines) {
