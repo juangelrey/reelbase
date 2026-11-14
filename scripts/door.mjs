@@ -131,13 +131,17 @@ export function classify(changes, findings = []) {
 }
 
 /**
- * Classifies `git diff <base>...<head>` in the repository at `cwd`.
+ * Classifies `git diff <base>...<head>` in the repository at `cwd`. Throws when the range cannot be read.
  * @param {string} base
  * @param {string} [head]
  * @param {{ cwd?: string }} [options]
  * @returns {DoorResult}
  */
 export function classifyRange(base, head = "HEAD", { cwd = process.cwd() } = {}) {
+  // Checked before any git call, here and in the integrity gate: git would read such a ref as an option.
+  for (const ref of [base, head]) {
+    if (ref.startsWith("-")) throw new Error(`a ref cannot start with "-": ${ref}`);
+  }
   const text = execFileSync("git", ["diff", "--name-status", "-M", "-z", "--no-ext-diff", `${base}...${head}`, "--"], {
     cwd,
     encoding: "utf8",
