@@ -26,6 +26,22 @@ import { removalRules } from "./integrity/removals.mjs";
  * @typedef {(files: DiffFile[], ctx: Context) => Finding[]} Rule
  */
 
+const QUOTED = /"(?:[^"\\]|\\.)*"/.source;
+// Either side of a file header is quoted on its own; an unquoted side never holds a quote.
+const HEADER = new RegExp(`^(${QUOTED}|a/[^"]+?) (${QUOTED}|b/[^"]+)$`);
+const ESCAPES = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r" };
+
+/**
+ * Undoes the C-style quoting git gives a path that holds a quote, a backslash or a control character.
+ * @param {string} path
+ */
+function unquote(path) {
+  if (!path.startsWith('"')) return path;
+  return path
+    .slice(1, -1)
+    .replace(/\\([0-7]{3}|.)/g, (_, c) => (c.length === 3 ? String.fromCharCode(parseInt(c, 8)) : (ESCAPES[c] ?? c)));
+}
+
 /**
  * Parses `git diff` unified output.
  * @param {string} text
@@ -60,10 +76,12 @@ export function parseDiff(text) {
 
     if (raw.startsWith("diff --git ")) {
       const rest = raw.slice("diff --git ".length);
-      const same = /^a\/(.+) b\/\1$/.exec(rest);
-      const differ = /^a\/(.+?) b\/(.+)$/.exec(rest);
-      const oldPath = same ? same[1] : differ ? differ[1] : rest;
-      const path = same ? same[1] : differ ? differ[2] : rest;
+      const same = /^a\/([^"]+) b\/\1$/.exec(rest);
+      const differ = same ? null : HEADER.exec(rest);
+      // A header that cannot be read must stop the check: skipping the file would pass whatever it adds.
+      if (!same && !differ) throw new Error(`unrecognised file header: ${raw}`);
+      const oldPath = same ? same[1] : unquote(differ[1]).slice(2);
+      const path = same ? same[1] : unquote(differ[2]).slice(2);
       file = { path, oldPath, status: "modified", added: [], removed: [] };
       files.push(file);
     } else if (!file) {
@@ -75,9 +93,9 @@ export function parseDiff(text) {
       file.status = "deleted";
     } else if (raw.startsWith("rename from ")) {
       file.status = "renamed";
-      file.oldPath = raw.slice("rename from ".length);
+      file.oldPath = unquote(raw.slice("rename from ".length));
     } else if (raw.startsWith("rename to ")) {
-      file.path = raw.slice("rename to ".length);
+      file.path = unquote(raw.slice("rename to ".length));
     } else {
       const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw);
       if (hunk) {

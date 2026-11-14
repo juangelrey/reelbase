@@ -136,6 +136,43 @@ describe("parseDiff", () => {
     expect(file).toMatchObject({ path: "src/new name.ts", oldPath: "src/old name.ts", status: "renamed" });
   });
 
+  it("unquotes a path git quoted because it holds a quote, backslash or control character", () => {
+    const diff = [
+      String.raw`diff --git "a/src/we\"ird.ts" "b/src/we\"ird.ts"`,
+      "new file mode 100644",
+      "--- /dev/null",
+      String.raw`+++ "b/src/we\"ird.ts"`,
+      "@@ -0,0 +1 @@",
+      "+first",
+      "",
+    ].join("\n");
+
+    const [file] = parseDiff(diff);
+
+    expect(file).toMatchObject({ path: 'src/we"ird.ts', status: "added" });
+    expect(file.added).toEqual([{ line: 1, text: "first" }]);
+  });
+
+  it("unquotes the quoted side of a rename", () => {
+    const diff = [
+      String.raw`diff --git a/src/old b/name.ts "b/src/back\\slash\ttab\001.ts"`,
+      "similarity index 100%",
+      "rename from src/old b/name.ts",
+      String.raw`rename to "src/back\\slash\ttab\001.ts"`,
+      "",
+    ].join("\n");
+
+    const [file] = parseDiff(diff);
+
+    expect(file).toMatchObject({ path: "src/back\\slash\ttab\x01.ts", oldPath: "src/old b/name.ts", status: "renamed" });
+  });
+
+  it("throws on a file header it cannot read, rather than skipping the file", () => {
+    const diff = ["diff --git src/a.ts src/a.ts", "--- src/a.ts", "+++ src/a.ts", "@@ -0,0 +1 @@", "+// @ts-ignore", ""].join("\n");
+
+    expect(() => parseDiff(diff)).toThrow("src/a.ts");
+  });
+
   it("separates the files of a multi-file diff", () => {
     const diff = diffOf("src/a.ts", ["+a"]) + diffOf("src/b.ts", ["+b"]);
 
@@ -397,6 +434,33 @@ describe("CLI", () => {
     const result = runCli([base, head]);
 
     expect(result.status).toBe(0);
+  });
+
+  it("does not blame head for a suppression the base branch removed after the branches split", () => {
+    const fork = startRepo();
+    const head = commit({ "src/c.ts": "export const c = 1;\n" });
+    git("checkout", "-q", "-b", "trunk", fork);
+    const base = commit({ "src/a.ts": "export const a = 1;\nexport const b: number = 2;\n" });
+
+    const result = runCli([base, head]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("no findings");
+  });
+
+  it.each([
+    ["a double quote", 'src/we"ird.ts'],
+    ["a backslash", "src/back\\slash.ts"],
+    ["a tab", "src/tab\tbed.ts"],
+    ["a newline", "src/new\nline.ts"],
+  ])("fails a suppression in a new file whose name holds %s", (_, path) => {
+    const base = startRepo();
+    const head = commit({ [path]: "// @ts-ignore\nexport const w: number = 1;\n" });
+
+    const result = runCli([base, head]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`${path}:1 ts-ignore`);
   });
 
   it("writes every finding with file, line and rule to the job summary", () => {
