@@ -63,3 +63,12 @@ describe("BrowseControls genre pills", () => {
     expect(within(explicit).getByRole("link", { name: "Comedy" })).toHaveAttribute("href", "/?genre=28,35&region=ES");
   });
 });
+
+describe("BrowseControls decade pills", () => {
+  it("shows the decade row in the filter bar, with the selected decade current", () => {
+    renderControls({ decade: 2010 });
+    const nav = screen.getByRole("navigation", { name: "Decade" });
+    expect(within(nav).getByRole("link", { name: "2010s" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: "All" })).not.toHaveAttribute("aria-current");
+  });
+});

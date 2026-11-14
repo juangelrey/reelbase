@@ -1,4 +1,4 @@
-import { DEFAULT_SORT, browseHref, parseBrowseParams, parseKind, parsePage, toggleId } from "./browse-params";
+import { DECADES, DEFAULT_SORT, browseHref, parseBrowseParams, parseKind, parsePage, toggleId } from "./browse-params";
 
 const known = new Set([28, 878, 18]);
 
@@ -234,6 +234,51 @@ describe("browseHref providers", () => {
     const state = { ...base, genres: [28, 35], providers: [8, 337], sort: "title" as const, page: 2 };
     const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
     expect(parseBrowseParams(query, new Set([28, 35]), "US", new Set([8, 337]))).toEqual(state);
+  });
+});
+
+describe("parseBrowseParams decade", () => {
+  it("lists the decades newest first, from the 2020s to the 1970s", () => {
+    expect(DECADES).toEqual([2020, 2010, 2000, 1990, 1980, 1970]);
+  });
+
+  it.each([2020, 2010, 2000, 1990, 1980, 1970])("reads decade=%i", (decade) => {
+    expect(parseBrowseParams({ decade: String(decade) }, known, "US").decade).toBe(decade);
+  });
+
+  it("reads All when the param is absent", () => {
+    expect(parseBrowseParams({}, known, "US").decade).toBeUndefined();
+  });
+
+  it.each(["", "1960", "2015", "2030", "2010s", "abc", " 2010", "02010", "2010.0"])("reads decade=%j as All", (decade) => {
+    expect(parseBrowseParams({ decade }, known, "US").decade).toBeUndefined();
+  });
+
+  it("uses the first value when the param repeats", () => {
+    expect(parseBrowseParams({ decade: ["1990", "2010"] }, known, "US").decade).toBe(1990);
+    expect(parseBrowseParams({ decade: ["1960", "2010"] }, known, "US").decade).toBeUndefined();
+  });
+});
+
+describe("browseHref decade", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes decade=<first year> only for a set decade", () => {
+    expect(browseHref({ ...base, decade: 2010 })).toBe("/?decade=2010");
+    expect(browseHref({ ...base, decade: undefined })).toBe("/");
+    expect(browseHref(base)).toBe("/");
+  });
+
+  it("keeps the decade alongside every other param", () => {
+    expect(
+      browseHref({ ...base, kind: "tv", genres: [18], providers: [8], decade: 1990, region: "ES", regionFromUrl: true, sort: "release", page: 2 }),
+    ).toBe("/?type=tv&genre=18&providers=8&decade=1990&region=ES&sort=release&page=2");
+  });
+
+  it("round-trips a decade with genres, services and sort", () => {
+    const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, sort: "rating" as const, page: 3 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
   });
 });
 
