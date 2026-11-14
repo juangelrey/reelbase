@@ -11,6 +11,7 @@ import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { removalRules } from "./integrity/removals.mjs";
+import { thresholdRules } from "./integrity/thresholds.mjs";
 
 /**
  * @typedef {{ line: number, text: string }} DiffLine  1-based line number and the text without its diff marker
@@ -21,7 +22,14 @@ import { removalRules } from "./integrity/removals.mjs";
  *   added: DiffLine[],       // numbered in the head file
  *   removed: DiffLine[],     // numbered in the base file
  * }} DiffFile
- * @typedef {{ rule: string, file: string, line: number | null }} Finding  line is null for a whole-file finding
+ * @typedef {{
+ *   rule: string,
+ *   file: string,
+ *   line: number | null,     // null for a whole-file finding
+ *   key?: string,            // threshold findings only: the config key, with its value at base and at head
+ *   old?: number | string,
+ *   new?: number | string,
+ * }} Finding
  * @typedef {{ readFile: (ref: "base" | "head", path: string) => string | null }} Context
  * @typedef {(files: DiffFile[], ctx: Context) => Finding[]} Rule
  */
@@ -142,6 +150,7 @@ export const failRules = [
   addedLineRule("eslint-disable-next-line", /\beslint-disable-next-line\b/),
   addedLineRule("eslint-disable-line", /\beslint-disable-line\b/),
   addedLineRule("only", /\b(?:it|test|describe)(?:\.\w+)*\.only\b/),
+  ...thresholdRules,
 ];
 
 /** Findings that pass the check but make the PR one-way. @type {Rule[]} */
@@ -204,12 +213,20 @@ export function oneWayFindings(base, head, options) {
 }
 
 /**
+ * The rule of a finding, followed by the key and the values of a threshold finding.
+ * @param {Finding} f
+ */
+function ruleLabel(f) {
+  return f.key === undefined ? f.rule : `${f.rule} ${f.key}: ${f.old} -> ${f.new}`;
+}
+
+/**
  * The job summary, as Markdown.
  * @param {{ failures: Finding[], reports: Finding[] }} result
  */
 export function formatSummary({ failures, reports }) {
   const table = (findings) =>
-    ["| File | Line | Rule |", "|---|---|---|", ...findings.map((f) => `| \`${f.file}\` | ${f.line ?? "-"} | ${f.rule} |`)].join("\n");
+    ["| File | Line | Rule |", "|---|---|---|", ...findings.map((f) => `| \`${f.file}\` | ${f.line ?? "-"} | ${ruleLabel(f).replaceAll("|", "\\|")} |`)].join("\n");
   const sections = ["## Test integrity"];
   if (failures.length === 0 && reports.length === 0) sections.push("Passed: no findings.");
   if (failures.length > 0) sections.push(`**Failed:** ${failures.length} finding(s) that are never allowed in a diff.`, table(failures));
@@ -232,7 +249,7 @@ function main() {
     console.error(`test-integrity: cannot read the diff: ${error.stderr || error.message}`);
     return 2;
   }
-  const line = (f) => `${f.file}${f.line === null ? "" : `:${f.line}`} ${f.rule}`;
+  const line = (f) => `${f.file}${f.line === null ? "" : `:${f.line}`} ${ruleLabel(f)}`;
   if (json) {
     console.log(JSON.stringify({ fail: result.failures, oneWay: result.reports }, null, 2));
   } else {
