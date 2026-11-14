@@ -110,6 +110,20 @@ describe("failRules: lowered coverage thresholds", () => {
     expect(failuresFor("vitest.config.ts", base, head)).toMatchObject([{ key: "thresholds.lines", old: 80, new: 50 }]);
   });
 
+  it("compares the lowest value of a conditional", () => {
+    const base = vitestConfig(["lines: process.env.CI ? 80 : 50,"]);
+    const head = vitestConfig(["lines: process.env.CI ? 80 : 40,"]);
+
+    expect(failuresFor("vitest.config.ts", base, head)).toMatchObject([{ rule: "lowered-threshold", key: "thresholds.lines", old: 50, new: 40 }]);
+  });
+
+  it("fails a changed negative threshold as unreadable, naming both texts", () => {
+    const base = vitestConfig(["lines: -10,"]);
+    const head = vitestConfig(["lines: -50,"]);
+
+    expect(failuresFor("vitest.config.ts", base, head)).toMatchObject([{ rule: "lowered-threshold", key: "thresholds.lines", old: "-10", new: "-50" }]);
+  });
+
   it("leaves a metric alone outside thresholds", () => {
     const base = 'export default { report: { lines: 80 }, name: "a" };\n';
     const head = 'export default { report: { lines: 10 }, name: "a" };\n';
@@ -230,6 +244,64 @@ describe("failRules: raised timeouts", () => {
     const head = playwrightConfig(["timeout: 2 * 60 * 1000,"]);
 
     expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: 30000, new: 120000 }]);
+  });
+
+  it("reads a timeout of 0 as no timeout, the largest raise there is", () => {
+    const base = playwrightConfig(["timeout: 30_000,"]);
+    const head = playwrightConfig(["timeout: 0,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toEqual([
+      { rule: "raised-timeout", file: "playwright.config.ts", line: 3, key: "timeout", old: 30000, new: Infinity },
+    ]);
+  });
+
+  it("reads an expect.timeout of 0 as no timeout", () => {
+    const base = playwrightConfig(["expect: { timeout: 5000 },"]);
+    const head = playwrightConfig(["expect: { timeout: 0 },"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "expect.timeout", old: 5000, new: Infinity }]);
+  });
+
+  it("passes a timeout of 0 replaced by a real timeout", () => {
+    const base = playwrightConfig(["timeout: 0,"]);
+    const head = playwrightConfig(["timeout: 60_000,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toEqual([]);
+  });
+
+  it("fails a number turned into a sum as unreadable, naming the new text", () => {
+    const base = playwrightConfig(["timeout: 30000,"]);
+    const head = playwrightConfig(["timeout: 30000 + 30000,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: 30000, new: "30000 + 30000" }]);
+  });
+
+  it("fails a number turned into a hexadecimal one as unreadable", () => {
+    const base = playwrightConfig(["timeout: 30_000,"]);
+    const head = playwrightConfig(["timeout: 0x1ffff,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: 30000, new: "0x1ffff" }]);
+  });
+
+  it("fails a changed number with an exponent as unreadable, naming both texts", () => {
+    const base = playwrightConfig(["timeout: 3e4,"]);
+    const head = playwrightConfig(["timeout: 6e4,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: "3e4", new: "6e4" }]);
+  });
+
+  it("fails a changed quotient as unreadable", () => {
+    const base = playwrightConfig(["timeout: 60000 / 2,"]);
+    const head = playwrightConfig(["timeout: 60000 / 1,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: "60000 / 2", new: "60000 / 1" }]);
+  });
+
+  it("fails a changed power as unreadable", () => {
+    const base = playwrightConfig(["timeout: 2 ** 10,"]);
+    const head = playwrightConfig(["timeout: 2 ** 20,"]);
+
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "timeout", old: "2 ** 10", new: "2 ** 20" }]);
   });
 
   it("counts a removed timeout below the default as raised to the default", () => {

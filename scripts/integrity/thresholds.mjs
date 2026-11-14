@@ -16,13 +16,14 @@ const METRICS = ["lines", "functions", "branches", "statements"];
 /**
  * The keys compared, in the order findings are listed. `weaker` is the direction that weakens the tests: -1 when
  * a lower value does, 1 when a higher one does. `fallback` is the tool's default, which stands in for a key that
- * is absent: no coverage threshold, and Playwright's no retries, 30 s per test and 5 s per expect.
+ * is absent: no coverage threshold, and Playwright's no retries, 30 s per test and 5 s per expect. `zeroIsOff`
+ * marks a key whose 0 switches the limit off, so it is read as Infinity.
  */
 const KEYS = [
   ...METRICS.map((metric) => ({ key: `thresholds.${metric}`, rule: "lowered-threshold", weaker: -1, fallback: 0 })),
   { key: "retries", rule: "raised-retries", weaker: 1, fallback: 0 },
-  { key: "timeout", rule: "raised-timeout", weaker: 1, fallback: 30_000 },
-  { key: "expect.timeout", rule: "raised-timeout", weaker: 1, fallback: 5_000 },
+  { key: "timeout", rule: "raised-timeout", weaker: 1, fallback: 30_000, zeroIsOff: true },
+  { key: "expect.timeout", rule: "raised-timeout", weaker: 1, fallback: 5_000, zeroIsOff: true },
 ];
 
 /**
@@ -126,15 +127,21 @@ function readEntries(source) {
 const NUMBER = /\d[\d_]*(?:\.\d+)?/.source;
 // A number, or a product of numbers such as `30 * 1000`, that is not part of a name.
 const TERM = new RegExp(String.raw`(?<![\w$.])${NUMBER}(?:\s*\*\s*${NUMBER})*`, "g");
+// Arithmetic the reader does not model: `+`, `-`, `/` and `**`, and a number that runs into a letter, as the
+// exponent of `3e4` and the prefix of `0x1f` do.
+const UNMODELLED = new RegExp(String.raw`[+\-/]|\*\*|(?<![\w$.])${NUMBER}[a-zA-Z]`);
 
 /**
  * The number a value stands for, taking the weakest when it holds several, as in `process.env.CI ? 2 : 0`.
- * NaN when it holds none.
+ * NaN when it holds none, or holds a number form the reader does not model.
  * @param {string} text
- * @param {number} weaker
+ * @param {{ weaker: number, zeroIsOff?: boolean }} spec
  */
-function numberOf(text, weaker) {
-  const terms = (text.match(TERM) ?? []).map((term) => term.split("*").reduce((product, n) => product * Number(n.replaceAll("_", "")), 1));
+function numberOf(text, { weaker, zeroIsOff }) {
+  if (UNMODELLED.test(text)) return NaN;
+  const terms = (text.match(TERM) ?? [])
+    .map((term) => term.split("*").reduce((product, n) => product * Number(n.replaceAll("_", "")), 1))
+    .map((term) => (zeroIsOff && term === 0 ? Infinity : term));
   if (terms.length === 0) return NaN;
   return weaker > 0 ? Math.max(...terms) : Math.min(...terms);
 }
@@ -143,12 +150,13 @@ function numberOf(text, weaker) {
  * What one side of the diff sets a key to: the weakest of its entries, or the default when it has none.
  * `value` is NaN when an entry cannot be read as a number.
  * @param {Entry[]} entries
- * @param {{ weaker: number, fallback: number }} spec
+ * @param {{ weaker: number, fallback: number, zeroIsOff?: boolean }} spec
  * @returns {{ value: number, text: string, line: number | null }}
  */
-function sideOf(entries, { weaker, fallback }) {
+function sideOf(entries, spec) {
+  const { weaker, fallback } = spec;
   if (entries.length === 0) return { value: fallback, text: String(fallback), line: null };
-  const values = entries.map((entry) => numberOf(entry.text, weaker));
+  const values = entries.map((entry) => numberOf(entry.text, spec));
   const unread = values.findIndex(Number.isNaN);
   const value = unread !== -1 ? NaN : weaker > 0 ? Math.max(...values) : Math.min(...values);
   const text = entries.map((entry) => entry.text).join(", ");
