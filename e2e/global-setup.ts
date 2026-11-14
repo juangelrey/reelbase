@@ -41,8 +41,9 @@ export default async function globalSetup(config: FullConfig) {
     } catch {
       throw new Error(`Could not reach ${origin} to set the Vercel bypass cookie.`);
     }
-    if (status === 401) {
-      throw new Error(`${origin} still answers 401 after the bypass request: check VERCEL_AUTOMATION_BYPASS_SECRET.`);
+    // Only a page proves the bypass: protection can also answer with a redirect to a login page, or a 403.
+    if (status >= 300) {
+      throw new Error(`${origin} answers ${status} after the bypass request: check VERCEL_AUTOMATION_BYPASS_SECRET.`);
     }
     try {
       await context.storageState({ path: storageState });

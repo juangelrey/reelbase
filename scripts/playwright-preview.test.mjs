@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A dummy: no test here may use a real bypass secret.
@@ -229,6 +230,22 @@ describe("e2e/global-setup.ts", () => {
     expect(existsSync(join(temp, "state.json"))).toBe(false);
   });
 
+  it.each([
+    ["a redirect to a login page", 302],
+    ["403", 403],
+    ["a server error", 500],
+  ])("fails when the preview answers %s to the cookie, since nothing but a page proves the bypass", async (_, code) => {
+    vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
+    const preview = await startServer((req, res) => res.writeHead(code, code === 302 ? { location: "/login" } : {}).end());
+
+    const failure = await runGlobalSetup(preview.origin).catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain(String(code));
+    expect(String(failure.stack)).not.toContain(SECRET);
+    expect(existsSync(join(temp, "state.json"))).toBe(false);
+  });
+
   it("fails when the preview cannot be reached, without naming the secret", async () => {
     vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
     const preview = await startServer((req) => req.socket.destroy());
@@ -256,18 +273,101 @@ describe("e2e/global-setup.ts", () => {
   });
 });
 
+const CODE_FILE = /\.[cm]?[jt]sx?$/;
+
+// Any way a file can reach Playwright's request API: the `request` fixture or export by name, renamed on import or
+// by destructuring; a `.request` or `["request"]` property; or its type. `.request(` stays allowed: it is the
+// method on a response or a route that returns the page's own request.
+const REQUEST_API = [
+  /[{,]\s*["']?request["']?\s*[,}:=]/,
+  /\brequest\s+as\b/,
+  /\.\s*request\b(?!\s*\()/,
+  /\[\s*["'`]request["'`]\s*\]/,
+  /\bAPIRequestContext\b/,
+];
+
+/** Whether the source of a file under e2e/ uses Playwright's request API. */
+function usesRequestAPI(source) {
+  return REQUEST_API.some((pattern) => pattern.test(source));
+}
+
+/** The code files under `dir`, at any depth, that use Playwright's request API, as sorted paths relative to `dir`. */
+function requestAPIOffenders(dir) {
+  return readdirSync(dir, { recursive: true })
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => CODE_FILE.test(file) && usesRequestAPI(readFileSync(join(dir, file), "utf8")))
+    .sort();
+}
+
+// A failed call on Playwright's request API (the `request` fixture, `page.request`, `context.request`) lists the
+// request headers in its error, and with them the bypass cookie: in the public CI log and in the HTML report.
+// A failed `page.goto` lists none.
 describe("e2e specs", () => {
-  // A failed call on Playwright's request API (the `request` fixture, `page.request`, `context.request`) lists the
-  // request headers in its error, and with them the bypass cookie: in the public CI log and in the HTML report.
-  // A failed `page.goto` lists none.
   it("never use Playwright's request API, whose errors print the bypass cookie", () => {
-    const e2e = new URL("../e2e/", import.meta.url);
-    const requestAPI = /[{,]\s*request\s*[,}:=]|\.request\b(?!\()|\bAPIRequestContext\b/;
+    const e2e = fileURLToPath(new URL("../e2e/", import.meta.url));
 
-    const offenders = readdirSync(e2e)
-      .filter((file) => file.endsWith(".ts") && file !== "global-setup.ts")
-      .filter((file) => requestAPI.test(readFileSync(new URL(file, e2e), "utf8")));
+    // The global setup is the one user: it rewrites every error before it leaves.
+    expect(requestAPIOffenders(e2e).filter((file) => file !== "global-setup.ts")).toEqual([]);
+  });
+});
 
-    expect(offenders).toEqual([]);
+describe("the request API guard", () => {
+  it.each([
+    ["the request fixture", 'test("a", async ({ request }) => {});'],
+    ["the request fixture beside another", 'test("a", async ({ page, request }) => {});'],
+    ["the request fixture under another name", 'test("a", async ({ request: api }) => {});'],
+    ["the request export", 'import { request } from "@playwright/test";'],
+    ["the request export beside another", 'import { expect, request, test } from "@playwright/test";'],
+    ["the request export under another name", 'import { request as r } from "@playwright/test";'],
+    ["the request export on a line of its own", 'import {\n  test,\n  request as r,\n} from "@playwright/test";'],
+    ["page.request", 'await page.request.get("/api");'],
+    ["context.request across lines", 'await page\n  .context()\n  .request.get("/api");'],
+    ["optional access", 'await page?.request.get("/api");'],
+    ["bracket access with double quotes", 'await page["request"].get("/api");'],
+    ["bracket access with single quotes", "await page['request'].get('/api');"],
+    ["bracket access with a template string", 'await page[`request`].get("/api");'],
+    ["a quoted key when destructuring", 'const { "request": api } = page;'],
+    ["the request API through the namespace", 'const api = await playwright.request.newContext();'],
+    ["the request API's type", "let api: APIRequestContext;"],
+  ])("finds %s", (_, source) => {
+    expect(usesRequestAPI(source)).toBe(true);
+  });
+
+  it.each([
+    ["page.goto", 'await page.goto("/");'],
+    ["the request a response answers", "const sent = response.request();"],
+    ["the request a route handles", 'await page.route("**/api", (route) => route.fulfill({ body: route.request().url() }));'],
+    ["waiting for a request", 'await page.waitForRequest("**/api");'],
+    ["the word in a test name", 'test("sends one request, then stops", async ({ page }) => {});'],
+  ])("allows %s", (_, source) => {
+    expect(usesRequestAPI(source)).toBe(false);
+  });
+
+  it("finds a use in a file of any code extension, at any depth", () => {
+    const files = {
+      "home.spec.ts": 'test("a", async ({ page }) => {});',
+      "top.spec.ts": 'test("a", async ({ request }) => {});',
+      "helpers/api.ts": "export const get = (page) => page.request.get('/api');",
+      "admin/x.spec.ts": 'test("a", async ({ request }) => {});',
+      "admin/deep/y.spec.tsx": 'test("a", async ({ request }) => {});',
+      "helpers/plain.js": "export const get = (page) => page.request.get('/api');",
+      "helpers/module.mjs": "export const get = (page) => page.request.get('/api');",
+      "helpers/common.cts": "export const get = (page) => page.request.get('/api');",
+      "helpers/notes.md": "Never use page.request in a spec.",
+    };
+    for (const [path, source] of Object.entries(files)) {
+      mkdirSync(dirname(join(temp, path)), { recursive: true });
+      writeFileSync(join(temp, path), source);
+    }
+
+    expect(requestAPIOffenders(temp)).toEqual([
+      "admin/deep/y.spec.tsx",
+      "admin/x.spec.ts",
+      "helpers/api.ts",
+      "helpers/common.cts",
+      "helpers/module.mjs",
+      "helpers/plain.js",
+      "top.spec.ts",
+    ]);
   });
 });
