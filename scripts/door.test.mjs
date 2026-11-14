@@ -225,11 +225,66 @@ describe("classify", () => {
   });
 
   it("gives two-way for a diff with no files", () => {
-    expect(classify([])).toEqual({ verdict: "two-way", files: [] });
+    expect(classify([])).toEqual({ verdict: "two-way", files: [], integrity: [] });
+  });
+});
+
+describe("classify with test-integrity findings", () => {
+  it("gives one-way for two-way paths when a test is skipped", () => {
+    const result = classify([edited("src/components/card.test.tsx")], [{ rule: "skip", file: "src/components/card.test.tsx", line: 12 }]);
+
+    expect(result.verdict).toBe("one-way");
+    expect(result.files).toEqual([{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }]);
+    expect(result.integrity).toEqual([
+      { file: "src/components/card.test.tsx", line: 12, rule: "skip", reason: "test removed or skipped" },
+    ]);
+  });
+
+  it("keeps a whole-file finding, whose line is null", () => {
+    const result = classify(
+      [edited("src/components/card.test.tsx")],
+      [{ rule: "fewer-test-cases", file: "src/components/card.test.tsx", line: null }],
+    );
+
+    expect(result.verdict).toBe("one-way");
+    expect(result.integrity).toEqual([
+      { file: "src/components/card.test.tsx", line: null, rule: "fewer-test-cases", reason: "test removed or skipped" },
+    ]);
+  });
+
+  it("gives the path-rules verdict and an empty list when there are no findings", () => {
+    expect(classify([edited("src/components/card.tsx")], [])).toEqual({
+      verdict: "two-way",
+      files: [{ file: "src/components/card.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [],
+    });
   });
 });
 
 describe("formatMarkdown", () => {
+  it("adds a row for each integrity finding, with its file and line", () => {
+    const text = formatMarkdown(
+      classify(
+        [edited("src/components/card.test.tsx")],
+        [
+          { rule: "skip", file: "src/components/card.test.tsx", line: 12 },
+          { rule: "fewer-test-cases", file: "src/components/card.test.tsx", line: null },
+        ],
+      ),
+    );
+
+    expect(text).toMatch(/\| `src\/components\/card\.test\.tsx` \| two-way \| .+ \|/);
+    expect(text).toContain("| `src/components/card.test.tsx:12` | one-way | test removed or skipped (skip) |");
+    expect(text).toContain("| `src/components/card.test.tsx` | one-way | test removed or skipped (fewer-test-cases) |");
+    expect(text).toContain("**Door:** one-way (0 of 1 file(s) one-way, 2 test-integrity finding(s))");
+  });
+
+  it("does not mention integrity findings when there are none", () => {
+    const text = formatMarkdown(classify([edited("src/components/card.tsx")]));
+
+    expect(text).toContain("**Door:** two-way (0 of 1 file(s) one-way)\n");
+  });
+
   it("prints one table row per file and the verdict", () => {
     const text = formatMarkdown(classify([edited("src/components/title-card.tsx"), edited("package.json")]));
 
@@ -324,6 +379,7 @@ describe("CLI", () => {
     expect(JSON.parse(run.stdout)).toEqual({
       verdict: "one-way",
       files: [{ file: "src/app/bar/page.tsx", class: "one-way", reason: expect.stringContaining("src/app/foo/page.tsx") }],
+      integrity: [],
     });
   });
 
@@ -340,6 +396,7 @@ describe("CLI", () => {
         { file: "src/components/card.tsx", class: "two-way", reason: expect.any(String) },
         { file: "src/lib/util.ts", class: "one-way", reason: expect.any(String) },
       ],
+      integrity: [],
     });
   });
 
@@ -354,6 +411,64 @@ describe("CLI", () => {
 
     expect(fork).not.toBe(base);
     expect(JSON.parse(run.stdout).verdict).toBe("two-way");
+  });
+
+  const CARD_TEST = [
+    'import { expect, it } from "vitest";',
+    'it("renders", () => {',
+    "  expect(1).toBe(1);",
+    "});",
+    'it("links", () => {',
+    "  expect(2).toBe(2);",
+    "});",
+    "",
+  ].join("\n");
+
+  it("is one-way when a diff of only src/components edits skips a test", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    // The skip is spelled in two parts so the integrity gate does not report this file's own fixture.
+    const head = commit({ "src/components/card.test.tsx": CARD_TEST.replace('it("links"', `it.${"skip"}("links"`) });
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("is one-way when a case is removed from a test whose source remains", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    const head = commit({ "src/components/card.test.tsx": CARD_TEST.split("\n").slice(0, 4).join("\n") + "\n" });
+
+    const run = runCli(["--base", base, "--head", head]);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("| `src/components/card.test.tsx` | two-way |");
+    expect(run.stdout).toContain("| `src/components/card.test.tsx` | one-way | test removed or skipped (fewer-test-cases) |");
+    expect(run.stdout).toContain("**Door:** one-way");
+  });
+
+  it("stays two-way when a test file is deleted together with the file it tests", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    git("rm", "-q", "src/components/card.tsx", "src/components/card.test.tsx");
+    const head = commit({});
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "two-way",
+      files: [
+        { file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) },
+        { file: "src/components/card.tsx", class: "two-way", reason: expect.any(String) },
+      ],
+      integrity: [],
+    });
   });
 
   it("defaults head to HEAD", () => {

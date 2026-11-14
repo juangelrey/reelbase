@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Door check: classifies every file a diff changes as a one-way or two-way door, by path alone.
+// Door check: classifies every file a diff changes as a one-way or two-way door, by path alone,
+// and calls the whole diff one-way too when the test-integrity gate reports a removed or skipped test.
 //
 //   node scripts/door.mjs --base <ref> [--head <ref>] [--json]     (head defaults to HEAD)
 //
@@ -11,6 +12,8 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { oneWayFindings } from "./test-integrity.mjs";
+
 /**
  * @typedef {"one-way" | "two-way"} Door
  * @typedef {{
@@ -19,7 +22,9 @@ import { fileURLToPath } from "node:url";
  *   oldPath: string | null,  // path at base; null for an added file
  * }} Change
  * @typedef {{ file: string, class: Door, reason: string }} FileDoor  file is the Change's path
- * @typedef {{ verdict: Door, files: FileDoor[] }} DoorResult
+ * @typedef {import("./test-integrity.mjs").Finding} Finding
+ * @typedef {{ file: string, line: number | null, rule: string, reason: string }} IntegrityDoor  line is null for a whole-file finding
+ * @typedef {{ verdict: Door, files: FileDoor[], integrity: IntegrityDoor[] }} DoorResult
  */
 
 const STATUS = { A: "added", M: "modified", D: "deleted", R: "renamed" };
@@ -113,13 +118,16 @@ export function classifyFile(change) {
 }
 
 /**
- * Classifies a whole diff: one-way if any file is.
+ * Classifies a whole diff: one-way if any file is, or if the test-integrity gate reported any one-way finding.
  * @param {Change[]} changes
+ * @param {Finding[]} [findings]  the gate's one-way findings for the same diff
  * @returns {DoorResult}
  */
-export function classify(changes) {
+export function classify(changes, findings = []) {
   const files = changes.map(classifyFile);
-  return { verdict: files.some((f) => f.class === "one-way") ? "one-way" : "two-way", files };
+  const integrity = findings.map(({ file, line, rule }) => ({ file, line, rule, reason: "test removed or skipped" }));
+  const oneWay = integrity.length > 0 || files.some((f) => f.class === "one-way");
+  return { verdict: oneWay ? "one-way" : "two-way", files, integrity };
 }
 
 /**
@@ -136,22 +144,26 @@ export function classifyRange(base, head = "HEAD", { cwd = process.cwd() } = {})
     maxBuffer: 256 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  return classify(parseNameStatus(text));
+  return classify(parseNameStatus(text), oneWayFindings(base, head, { cwd }));
 }
 
 /**
- * The per-file table and the verdict, as Markdown.
+ * The per-file table and the verdict, as Markdown. Each integrity finding is a one-way row after the files,
+ * naming its file, its line when it has one, and its rule.
  * @param {DoorResult} result
  */
-export function formatMarkdown({ verdict, files }) {
+export function formatMarkdown({ verdict, files, integrity }) {
   const cell = (text) => text.replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|");
+  const row = (file, door, reason) => `| \`${cell(file).replace(/`/g, "'")}\` | ${door} | ${cell(reason)} |`;
   const table = [
     "| File | Class | Reason |",
     "|---|---|---|",
-    ...files.map((f) => `| \`${cell(f.file).replace(/`/g, "'")}\` | ${f.class} | ${cell(f.reason)} |`),
+    ...files.map((f) => row(f.file, f.class, f.reason)),
+    ...integrity.map((f) => row(f.line === null ? f.file : `${f.file}:${f.line}`, "one-way", `${f.reason} (${f.rule})`)),
   ].join("\n");
   const oneWay = files.filter((f) => f.class === "one-way").length;
-  const count = files.length === 0 ? "" : ` (${oneWay} of ${files.length} file(s) one-way)`;
+  const findings = integrity.length === 0 ? "" : `, ${integrity.length} test-integrity finding(s)`;
+  const count = files.length === 0 ? "" : ` (${oneWay} of ${files.length} file(s) one-way${findings})`;
   return ["## Door check", files.length === 0 ? "No changed files." : table, `**Door:** ${verdict}${count}`].join("\n\n") + "\n";
 }
 
