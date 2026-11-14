@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,8 +56,7 @@ function protectedPreview(req, res) {
   res.end();
 }
 
-async function runGlobalSetup(baseURL) {
-  const statePath = join(temp, "state.json");
+async function runGlobalSetup(baseURL, statePath = join(temp, "state.json")) {
   const { default: globalSetup } = await import("../e2e/global-setup.ts");
   const teardown = await globalSetup({ projects: [{ use: { baseURL, storageState: statePath } }] });
   return { statePath, teardown };
@@ -162,6 +161,26 @@ describe("e2e/global-setup.ts", () => {
     expect(state.cookies).toMatchObject([{ name: "_vercel_jwt", value: "stub-cookie", domain: "127.0.0.1" }]);
   });
 
+  it("sends the secret to the root of the preview's origin, whatever path and query the base URL has", async () => {
+    vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
+    const preview = await startServer(protectedPreview);
+
+    await runGlobalSetup(`${preview.origin}/search?next=https://other.example.invalid/`);
+
+    const withSecret = preview.requests.filter((request) => request.headers["x-vercel-protection-bypass"] !== undefined);
+    expect(withSecret.map((request) => request.url)).toEqual(["/"]);
+  });
+
+  it("refuses a preview that is not https before sending the secret", async () => {
+    vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
+
+    const failure = await runGlobalSetup("http://reelbase-preview.example.invalid").catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("must be https");
+    expect(String(failure.stack)).not.toContain(SECRET);
+  });
+
   it("saves only the cookie, never the secret", async () => {
     vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
     const preview = await startServer(protectedPreview);
@@ -207,6 +226,7 @@ describe("e2e/global-setup.ts", () => {
     expect(failure).toBeInstanceOf(Error);
     expect(failure.message).toContain("401");
     expect(String(failure.stack)).not.toContain(SECRET);
+    expect(existsSync(join(temp, "state.json"))).toBe(false);
   });
 
   it("fails when the preview cannot be reached, without naming the secret", async () => {
@@ -219,5 +239,35 @@ describe("e2e/global-setup.ts", () => {
     expect(failure.message).toContain(preview.origin);
     expect(String(failure.stack)).not.toContain(SECRET);
     expect(String(failure.cause)).not.toContain(SECRET);
+  });
+
+  it("says the cookie could not be saved, not that the preview is unreachable, when the state file cannot be written", async () => {
+    vi.stubEnv("VERCEL_AUTOMATION_BYPASS_SECRET", SECRET);
+    const preview = await startServer(protectedPreview);
+    const notADirectory = join(temp, "a-file");
+    writeFileSync(notADirectory, "");
+
+    const failure = await runGlobalSetup(preview.origin, join(notADirectory, "state.json")).catch((error) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("Could not save");
+    expect(failure.message).not.toContain("Could not reach");
+    expect(String(failure.stack)).not.toContain(SECRET);
+  });
+});
+
+describe("e2e specs", () => {
+  // A failed call on Playwright's request API (the `request` fixture, `page.request`, `context.request`) lists the
+  // request headers in its error, and with them the bypass cookie: in the public CI log and in the HTML report.
+  // A failed `page.goto` lists none.
+  it("never use Playwright's request API, whose errors print the bypass cookie", () => {
+    const e2e = new URL("../e2e/", import.meta.url);
+    const requestAPI = /[{,]\s*request\s*[,}:=]|\.request\b(?!\()|\bAPIRequestContext\b/;
+
+    const offenders = readdirSync(e2e)
+      .filter((file) => file.endsWith(".ts") && file !== "global-setup.ts")
+      .filter((file) => requestAPI.test(readFileSync(new URL(file, e2e), "utf8")));
+
+    expect(offenders).toEqual([]);
   });
 });
