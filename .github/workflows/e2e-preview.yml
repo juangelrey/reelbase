@@ -1,0 +1,53 @@
+name: e2e-preview
+
+# Runs every e2e spec against each Vercel preview once it is ready, through deployment protection. The check is
+# reported on the commit Vercel deployed, which is the PR's head commit, so it can be a required check on `main`.
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-preview-${{ github.event.deployment.sha }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-preview:
+    name: e2e-preview
+    # Only a finished preview: Vercel names the environment `Preview`, or `Preview – <project>`. Production is skipped.
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment.environment, 'Preview')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.deployment.sha }}
+          persist-credentials: false
+      # Installs the pnpm version named by `packageManager` in package.json; before setup-node, which caches its store.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # The secret reaches this step only, as an env var; e2e/global-setup.ts sends it once, to the preview's origin.
+      - name: Run the e2e specs against the preview
+        run: pnpm e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      # The repo is public, so its artifacts are too. Only the HTML report goes up, with its failure screenshots:
+      # preview runs record no trace or video, and the bypass cookie's storage state stays in $RUNNER_TEMP.
+      - name: Upload the HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

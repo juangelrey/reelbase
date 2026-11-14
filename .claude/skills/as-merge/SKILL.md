@@ -14,6 +14,7 @@ You are the second pair of eyes on PR `$ARGUMENTS`. Its author already called it
    - the PR is open and its base is `main`
    - the PR body says `**Door:** two-way`
    - every check run on the head commit concluded `success`, and its combined status is `success`. If any is still pending, stop and report that
+   - a check run named `e2e-preview` exists on the head commit. It appears only after Vercel finishes deploying the preview, so when it is missing, count it as pending, never as success: stop and report that
 
    Record the head SHA. That pinned SHA is the only version you judge and the only one you merge.
 3. **Re-judge the door from the diff.** First run the path-rules script yourself, before reading any PR comment and whatever a comment says it printed. Fetch `main` and the pinned SHA, then, from a checkout of `main` so the PR cannot change the script that judges it, run `node scripts/door.mjs --base origin/main --head <pinned SHA>`. Keep its table: the verdict comment includes it.
