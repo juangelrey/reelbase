@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Test-integrity gate: inspects what a diff adds or removes, never existing code.
 //
-//   node scripts/test-integrity.mjs <base> [head]     (head defaults to HEAD)
+//   node scripts/test-integrity.mjs [--json] <base> [head]     (head defaults to HEAD)
 //
 // Exits 1 when any failRules finding exists, 0 otherwise. reportRules findings
 // never fail the check; the door script reads them to mark the PR one-way.
+// --json prints { fail, oneWay } instead of one line per finding.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { removalRules } from "./integrity/removals.mjs";
 
 /**
  * @typedef {{ line: number, text: string }} DiffLine  1-based line number and the text without its diff marker
@@ -124,7 +127,7 @@ export const failRules = [
 ];
 
 /** Findings that pass the check but make the PR one-way. @type {Rule[]} */
-export const reportRules = [];
+export const reportRules = [...removalRules];
 
 /** @param {Finding} a @param {Finding} b */
 function byPosition(a, b) {
@@ -172,6 +175,17 @@ export function analyzeRange(base, head = "HEAD", { cwd = process.cwd() } = {}) 
 }
 
 /**
+ * The findings of `git diff <base>...<head>` that make the PR one-way, for the door script.
+ * @param {string} base
+ * @param {string} [head]
+ * @param {{ cwd?: string }} [options]
+ * @returns {Finding[]}
+ */
+export function oneWayFindings(base, head, options) {
+  return analyzeRange(base, head, options).reports;
+}
+
+/**
  * The job summary, as Markdown.
  * @param {{ failures: Finding[], reports: Finding[] }} result
  */
@@ -181,14 +195,16 @@ export function formatSummary({ failures, reports }) {
   const sections = ["## Test integrity"];
   if (failures.length === 0 && reports.length === 0) sections.push("Passed: no findings.");
   if (failures.length > 0) sections.push(`**Failed:** ${failures.length} finding(s) that are never allowed in a diff.`, table(failures));
-  if (reports.length > 0) sections.push(`**Reported:** ${reports.length} finding(s) that make this PR one-way.`, table(reports));
+  if (reports.length > 0) sections.push("### Makes this PR one-way", `${reports.length} finding(s) that pass the check.`, table(reports));
   return sections.join("\n\n") + "\n";
 }
 
 function main() {
-  const [base, head] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const json = args.includes("--json");
+  const [base, head] = args.filter((arg) => arg !== "--json");
   if (!base) {
-    console.error("Usage: node scripts/test-integrity.mjs <base> [head]");
+    console.error("Usage: node scripts/test-integrity.mjs [--json] <base> [head]");
     return 2;
   }
   let result;
@@ -199,9 +215,13 @@ function main() {
     return 2;
   }
   const line = (f) => `${f.file}${f.line === null ? "" : `:${f.line}`} ${f.rule}`;
-  for (const f of result.failures) console.log(`FAIL   ${line(f)}`);
-  for (const f of result.reports) console.log(`REPORT ${line(f)}`);
-  if (result.failures.length + result.reports.length === 0) console.log("test-integrity: no findings");
+  if (json) {
+    console.log(JSON.stringify({ fail: result.failures, oneWay: result.reports }, null, 2));
+  } else {
+    for (const f of result.failures) console.log(`FAIL   ${line(f)}`);
+    for (const f of result.reports) console.log(`REPORT ${line(f)}`);
+    if (result.failures.length + result.reports.length === 0) console.log("test-integrity: no findings");
+  }
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatSummary(result));
   return result.failures.length > 0 ? 1 : 0;
 }
