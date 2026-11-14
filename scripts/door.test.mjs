@@ -604,6 +604,40 @@ describe("CLI", () => {
     });
   });
 
+  it("sees an added submodule even when the base branch's .gitmodules ignores it", () => {
+    startRepo();
+    const base = commit({ ".gitmodules": '[submodule "vendor"]\n\tpath = src/components/vendor\n\turl = ./x\n\tignore = all\n' });
+    git("update-index", "--add", "--cacheinfo", `160000,${base},src/components/vendor`);
+    git("commit", "-q", "-m", "c");
+
+    const run = runCli(["--base", base, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/vendor", class: "one-way", reason: "submodule" }],
+      integrity: [],
+    });
+  });
+
+  it("keeps each file's mode when a rename comes before a symbolic link in the diff", () => {
+    startRepo();
+    const base = commit({ "src/components/a-card.tsx": "export const ACard = () => 'a card with enough text to be found again';\n" });
+    git("mv", "src/components/a-card.tsx", "src/components/b-card.tsx");
+    symlinkSync("../../package.json", join(repo, "src/components/z-link.tsx"));
+    const head = commit({});
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [
+        { file: "src/components/b-card.tsx", class: "two-way", reason: expect.stringContaining("renamed from") },
+        { file: "src/components/z-link.tsx", class: "one-way", reason: "symbolic link" },
+      ],
+      integrity: [],
+    });
+  });
+
   it("classifyRange reads the repository at cwd, not the one the process runs in", () => {
     startRepo();
     const base = commit({ "src/components/card.test.tsx": CARD_TEST });

@@ -162,12 +162,16 @@ export function classifyRange(base, head = "HEAD", { cwd = process.cwd() } = {})
     if (ref.startsWith("-")) throw new Error(`a ref cannot start with "-": ${ref}`);
   }
   const diff = (...format) =>
-    execFileSync("git", ["diff", ...format, "-z", "--no-ext-diff", `${base}...${head}`, "--"], {
+    // --ignore-submodules=none: a merged .gitmodules with `ignore = all`, or a local diff.ignoreSubmodules,
+    // would otherwise drop an added submodule from the diff, and the door would never see it.
+    execFileSync("git", ["diff", ...format, "-z", "--no-ext-diff", "--ignore-submodules=none", `${base}...${head}`, "--"], {
       cwd,
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
+  // --no-renames: parseModes reads two fields per record, and a rename record has three, so with renames on
+  // every path after a rename would lose its mode.
   const modes = parseModes(diff("--raw", "--no-renames"));
   const changes = parseNameStatus(diff("--name-status", "-M")).map((change) => ({ ...change, mode: modes.get(change.path) }));
   return classify(changes, oneWayFindings(base, head, { cwd }));
