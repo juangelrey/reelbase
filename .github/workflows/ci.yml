@@ -51,7 +51,12 @@ jobs:
           node-version-file: .nvmrc
       # Runs the base branch's copy of the script, not the PR's, so a PR cannot change the gate that judges it.
       # No install: the script uses only Node built-ins.
+      # The diff is read with the base branch's attributes, and code files are always diffed as text. Otherwise
+      # git hides a file's lines behind "Binary files differ" when the PR's own .gitattributes marks it `-diff`,
+      # or when the file holds a NUL byte. GIT_ATTR_SOURCE needs git 2.40; .git/info/attributes outranks every .gitattributes.
       - name: Run the base branch's copy of the gate
+        env:
+          GIT_ATTR_SOURCE: ${{ github.event.pull_request.base.sha }}
         run: |
           if ! git cat-file -e "$BASE_SHA:scripts/test-integrity.mjs" 2>/dev/null; then
             echo "::notice title=test-integrity skipped::The base branch has no scripts/test-integrity.mjs yet, so there is no trusted copy to run."
@@ -59,6 +64,8 @@ jobs:
           fi
           mkdir -p "$RUNNER_TEMP/base"
           git archive "$BASE_SHA" scripts | tar -x -C "$RUNNER_TEMP/base"
+          mkdir -p .git/info
+          printf '%s diff\n' '*.[jt]s' '*.[jt]sx' '*.[cm][jt]s' '*.[cm][jt]sx' > .git/info/attributes
           node "$RUNNER_TEMP/base/scripts/test-integrity.mjs" "$BASE_SHA" "$HEAD_SHA"
 
   # Informs, never gates: every step ends green whatever the verdict.
@@ -81,12 +88,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # The version file is the PR's: when it cannot be installed, the job goes on with the runner's own Node.
       - uses: actions/setup-node@v7
+        continue-on-error: true
         with:
           node-version-file: .nvmrc
       # Runs the base branch's copy of the script, not the PR's, so a PR cannot change its own verdict.
-      # With no copy on the base branch, or when the script fails, the door is one-way.
+      # With no copy on the base branch, or when the script fails, the door is one-way. The diff is read as in
+      # the test-integrity job: with the base branch's attributes, and code files always as text.
       - name: Classify the diff with the base branch's copy of the script
+        env:
+          GIT_ATTR_SOURCE: ${{ github.event.pull_request.base.sha }}
         run: |
           one_way() { printf '## Door check\n\n%s\n\n**Door:** one-way\n' "$1"; }
           if ! git cat-file -e "$BASE_SHA:scripts/door.mjs" 2>/dev/null; then
@@ -94,6 +106,8 @@ jobs:
           else
             mkdir -p "$RUNNER_TEMP/base"
             git archive "$BASE_SHA" scripts | tar -x -C "$RUNNER_TEMP/base"
+            mkdir -p .git/info
+            printf '%s diff\n' '*.[jt]s' '*.[jt]sx' '*.[cm][jt]s' '*.[cm][jt]sx' > .git/info/attributes
             report=$(node "$RUNNER_TEMP/base/scripts/door.mjs" --base "$BASE_SHA" --head "$HEAD_SHA") ||
               report=$(one_way 'The door script failed; see the job log.')
           fi
@@ -108,7 +122,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COMMENTS: repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
         run: |
-          id=$(gh api --paginate "$COMMENTS" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- door-check -->"))) | .id' | head -n 1)
+          # No pipe, so a failed listing stops the step here and no second comment is posted.
+          ids=$(gh api --paginate "$COMMENTS" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- door-check -->"))) | .id')
+          id=${ids%%$'\n'*}
           if [ -n "$id" ]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/door.md" --silent
           else
