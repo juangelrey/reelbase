@@ -251,15 +251,24 @@ describe("failRules: raised timeouts", () => {
     const head = playwrightConfig(["timeout: 0,"]);
 
     expect(failuresFor("playwright.config.ts", base, head)).toEqual([
-      { rule: "raised-timeout", file: "playwright.config.ts", line: 3, key: "timeout", old: 30000, new: Infinity },
+      { rule: "raised-timeout", file: "playwright.config.ts", line: 3, key: "timeout", old: 30000, new: "0" },
     ]);
+  });
+
+  it("keeps the 0 of a switched-off timeout when the finding is written as JSON", () => {
+    const base = playwrightConfig(["timeout: 30_000,"]);
+    const head = playwrightConfig(["timeout: 0,"]);
+
+    expect(JSON.stringify(failuresFor("playwright.config.ts", base, head))).toBe(
+      '[{"rule":"raised-timeout","file":"playwright.config.ts","line":3,"key":"timeout","old":30000,"new":"0"}]',
+    );
   });
 
   it("reads an expect.timeout of 0 as no timeout", () => {
     const base = playwrightConfig(["expect: { timeout: 5000 },"]);
     const head = playwrightConfig(["expect: { timeout: 0 },"]);
 
-    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "expect.timeout", old: 5000, new: Infinity }]);
+    expect(failuresFor("playwright.config.ts", base, head)).toMatchObject([{ key: "expect.timeout", old: 5000, new: "0" }]);
   });
 
   it("passes a timeout of 0 replaced by a real timeout", () => {

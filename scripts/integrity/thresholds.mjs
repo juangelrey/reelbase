@@ -184,7 +184,7 @@ function weakenedConfig(files, ctx) {
         const readable = !Number.isNaN(before.value) && !Number.isNaN(after.value);
         const weakened = readable ? (after.value - before.value) * spec.weaker > 0 : before.text !== after.text;
         if (!weakened) return [];
-        const shown = (side) => (Number.isNaN(side.value) ? side.text : side.value);
+        const shown = (side) => (Number.isFinite(side.value) ? side.value : side.text);
         return [{ rule: spec.rule, file: file.path, line: after.line, key: spec.key, old: shown(before), new: shown(after) }];
       });
     });

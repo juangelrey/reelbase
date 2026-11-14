@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { analyze, failRules, isExempt, parseDiff, reportRules } from "./test-integrity.mjs";
+import { analyze, analyzeRange, failRules, isExempt, parseDiff, reportRules } from "./test-integrity.mjs";
 
 const CLI = fileURLToPath(new URL("./test-integrity.mjs", import.meta.url));
 
@@ -446,6 +446,19 @@ describe("CLI", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("no findings");
+  });
+
+  it("compares a threshold with the config where the branches split, not with a later raise on the base branch", () => {
+    const config = (lines, reporter) => `export default { test: { coverage: { reporter: ["${reporter}"], thresholds: { lines: ${lines} } } } };\n`;
+    startRepo();
+    const fork = commit({ "vitest.config.ts": config(80, "text") });
+    const head = commit({ "vitest.config.ts": config(80, "html") });
+    git("checkout", "-q", "-b", "trunk", fork);
+    const base = commit({ "vitest.config.ts": config(90, "text") });
+
+    const result = analyzeRange(base, head, { cwd: repo });
+
+    expect(result.failures).toEqual([]);
   });
 
   it.each([
