@@ -11,7 +11,7 @@ Run it from the main session, since step 3 spawns a subagent.
 
 1. **CLAIM.** Name the decision in two or three lines: what stands, and why it matters if it's wrong. If you can't write it that compactly, you have a vibe, not a decision.
 2. **EXTRACT.** Isolate the smallest reviewable unit: the **artifact** (the diff or function, or the proposal in 3–5 sentences) and the **contract** (the acceptance criteria or constraints it must satisfy). Strip your reasoning but keep the evidence: include any caller, guard or test that contradicts the claim. If the unit is too big to hold in one read, decompose it first.
-3. **DOUBT.** Spawn a fresh subagent with exactly this prompt:
+3. **DOUBT.** Spawn the `doubter` agent with exactly this prompt:
 
    ```
    Adversarial review. Find what is wrong with this artifact.

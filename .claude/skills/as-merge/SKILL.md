@@ -1,6 +1,6 @@
 ---
 name: as-merge
-description: Merge a two-way-door PR from /as-build auto or dark after an independent check. Runs as a fresh subagent from /as-build dark, or by hand in a fresh session.
+description: Merge a two-way-door PR from /as-build auto or dark after an independent check. Runs as the merger agent from /as-build dark, or by hand in a fresh session.
 disable-model-invocation: true
 argument-hint: <PR number>
 ---

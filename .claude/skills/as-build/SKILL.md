@@ -9,8 +9,8 @@ disable-model-invocation: true
 | Mode | Builds | User approves | Ends with |
 |---|---|---|---|
 | `/as-build` | the next ready ticket | nothing up front | one PR for that ticket, which the user merges |
-| `/as-build auto` | the whole plan, written first if none exists, each ticket in a fresh subagent | the plan once, plus any blocker or high-risk ticket | one PR for the plan, which the user merges |
-| `/as-build dark` | same as `auto`, but ready tickets run in parallel, each in its own worktree | the plan once; parked tickets wait for the user | the same PR, merged by a fresh subagent if its door is two-way, otherwise left for the user |
+| `/as-build auto` | the whole plan, written first if none exists, each ticket in a fresh `implementer` agent | the plan once, plus any blocker or high-risk ticket | one PR for the plan, which the user merges |
+| `/as-build dark` | same as `auto`, but ready tickets run in parallel, each in its own worktree | the plan once; parked tickets wait for the user | the same PR, merged by the `merger` agent if its door is two-way, otherwise left for the user |
 
 `$ARGUMENTS` selects the mode: `auto` and `dark` follow `autonomous.md` in this folder, and empty or anything else runs Default.
 
