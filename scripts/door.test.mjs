@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { classify, classifyFile, formatMarkdown, parseNameStatus } from "./door.mjs";
+import { classify, classifyFile, classifyRange, formatMarkdown, parseNameStatus } from "./door.mjs";
 
 const CLI = fileURLToPath(new URL("./door.mjs", import.meta.url));
 
@@ -481,6 +481,38 @@ describe("CLI", () => {
 
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("reports a skip in the --head commit when the checked-out commit has reverted it", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    const head = commit({ "src/components/card.test.tsx": CARD_TEST.replace('it("links"', `it.${"skip"}("links"`) });
+    const checkedOut = commit({ "src/components/card.test.tsx": CARD_TEST });
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(checkedOut).not.toBe(head);
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("classifyRange reads the repository at cwd, not the one the process runs in", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    const head = commit({ "src/components/card.test.tsx": CARD_TEST.replace('it("links"', `it.${"skip"}("links"`) });
+
+    const result = classifyRange(base, head, { cwd: repo });
+
+    expect(process.cwd()).not.toBe(repo);
+    expect(result).toEqual({
       verdict: "one-way",
       files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
       integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
