@@ -188,7 +188,9 @@ export function analyzeRange(base, head = "HEAD", { cwd = process.cwd() } = {}) 
       maxBuffer: 256 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
-  const diff = git("diff", "--no-color", "--no-ext-diff", "--find-renames", `${base}...${head}`);
+  // --text: git otherwise prints only "Binary files differ" for a file that holds a NUL byte or that a
+  // .gitattributes marks `-diff`, and whatever that file adds would pass unseen.
+  const diff = git("diff", "--no-color", "--no-ext-diff", "--text", "--find-renames", `${base}...${head}`);
   // `base...head` compares head with the commit where it left base, so that commit is the base side of every file.
   const refs = { base: git("merge-base", base, head).trim(), head };
   const readFile = (ref, path) => {
