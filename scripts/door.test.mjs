@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,15 @@ describe("parseNameStatus", () => {
 
     expect(parseNameStatus(text)).toEqual([
       { status: "renamed", path: "src/app/new/page.tsx", oldPath: "src/app/old/page.tsx" },
+      { status: "modified", path: "README.md", oldPath: "README.md" },
+    ]);
+  });
+
+  it("reads a copy as one added file and stays aligned on the entry after it", () => {
+    const text = "C100\0src/components/old.tsx\0src/components/new.tsx\0M\0README.md\0";
+
+    expect(parseNameStatus(text)).toEqual([
+      { status: "added", path: "src/components/new.tsx", oldPath: null },
       { status: "modified", path: "README.md", oldPath: "README.md" },
     ]);
   });
@@ -93,6 +102,32 @@ describe("classifyFile: one-way rules", () => {
   it("matches a config file name in a subdirectory too", () => {
     expect(classifyFile(edited("src/components/package.json")).class).toBe("one-way");
     expect(classifyFile(added("docs/AGENTS.md")).class).toBe("one-way");
+  });
+
+  it.each([
+    ["Package.json", "dependencies"],
+    [".GitHub/workflows/ci.yml", "CI"],
+    ["Next.Config.ts", "framework or deploy config"],
+    [".ENV.local", "environment variables"],
+    ["Sentry.server.config.ts", "observability config"],
+    ["src/Instrumentation.ts", "observability config"],
+    ["src/lib/Flags/index.ts", "feature flags"],
+    ["src/lib/Watchlist/store.ts", "persisted data"],
+    ["Scripts/door.mjs", "scripts"],
+    [".Claude/settings.json", "agent instructions"],
+    ["agents.md", "agent instructions"],
+  ])("%s edited is one-way whatever its case (%s)", (path, reason) => {
+    const result = classifyFile(edited(path));
+
+    expect(result.class).toBe("one-way");
+    expect(result.reason).toContain(reason);
+  });
+
+  it("is one-way for a deleted page whose name differs in case", () => {
+    const result = classifyFile(deleted("src/app/foo/Page.tsx"));
+
+    expect(result.class).toBe("one-way");
+    expect(result.reason).toMatch(/public route/);
   });
 
   it.each(["src/app/foo/page.tsx", "src/app/page.tsx", "src/app/api/titles/route.ts", "src/app/(browse)/[id]/page.tsx"])(
@@ -306,6 +341,18 @@ describe("formatMarkdown", () => {
 
     expect(text).toContain("| `docs/a\\|b.md` | two-way |");
   });
+
+  it("replaces a backtick in a file name, so it cannot close the code span", () => {
+    const text = formatMarkdown(classify([edited("docs/a`b.md")]));
+
+    expect(text).toContain("| `docs/a'b.md` | two-way |");
+  });
+
+  it("keeps a file name with a newline on one table row", () => {
+    const text = formatMarkdown(classify([edited("docs/a\nb.md")]));
+
+    expect(text).toContain("| `docs/a b.md` | two-way |");
+  });
 });
 
 describe("CLI", () => {
@@ -498,6 +545,20 @@ describe("CLI", () => {
 
     expect(run.status).toBe(2);
     expect(run.stderr).toContain("Usage:");
+  });
+
+  it.each([
+    ["--base", ["--base", "--output=pwned"]],
+    ["--head", ["--base", "HEAD", "--head", "--output=pwned"]],
+  ])("exits 2 when the %s ref starts with a dash, instead of passing it to git as an option", (_name, args) => {
+    startRepo();
+
+    const run = runCli(args);
+
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain("door:");
+    expect(run.stdout).toBe("");
+    expect(readdirSync(repo).filter((name) => name.includes("pwned"))).toEqual([]);
   });
 
   it("exits 2 when git cannot read the range", () => {
