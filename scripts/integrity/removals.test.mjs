@@ -219,6 +219,29 @@ describe("reportRules: fewer test cases", () => {
     expect(reportsOf(diff)).toEqual([]);
   });
 
+  it.each([
+    ["test.describe('group', () => {"],
+    ["test.beforeEach(async ({ page }) => {"],
+    ["await test.step('open the page', async () => {"],
+    ["expect(/home/.test(title)).toBe(true);"],
+  ])("reports a removed test case although %s is added, which is not a case", (added) => {
+    const diff = diffOf("e2e/home.spec.ts", ["-test('home', async ({ page }) => {});", `+${added}`]);
+
+    expect(reportsOf(diff)).toEqual(fewer("e2e/home.spec.ts"));
+  });
+
+  it("reports a removed it case although a regex .test( call is added", () => {
+    const diff = diffOf("src/a.test.ts", ["-it('a', () => {});", "+expect(/x/.test(s)).toBe(true);"]);
+
+    expect(reportsOf(diff)).toEqual(fewer("src/a.test.ts"));
+  });
+
+  it("does not count test.describe blocks, so unwrapping a test.describe is not reported", () => {
+    const diff = diffOf("e2e/home.spec.ts", ["-test.describe('group', () => {", "   test('home', async () => {});", "-});"]);
+
+    expect(reportsOf(diff)).toEqual([]);
+  });
+
   it("reports cases removed along with their nested describe", () => {
     const diff = diffOf("src/a.test.ts", [" describe('outer', () => {", "-  describe('inner', () => {", "-    it('a', () => {});", "-    it('b', () => {});", "-  });", " });"]);
 
