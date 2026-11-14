@@ -21,22 +21,28 @@ function renderPreview(props: Partial<typeof unforgiven> = {}) {
   );
 }
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const trigger = (name = "Unforgiven") => screen.getByRole("button", { name: `Preview ${name}` });
 const card = (name = "Unforgiven") => screen.queryByRole("dialog", { name });
 
 describe("TitlePreview", () => {
-  const user = () => userEvent.setup();
+  // Fake timers make the hover delays exact: time moves only when a test advances it.
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   const showPopover = vi.fn();
   const hidePopover = vi.fn();
 
   // jsdom has no Popover API; stub it so the component takes the same path as a browser.
   beforeEach(() => {
+    vi.useFakeTimers();
+    // Testing Library flushes its own zero-delay timer after each user event only when it finds a
+    // `jest` global; without one, every user event would hang on the faked clock.
+    vi.stubGlobal("jest", { advanceTimersByTime: vi.advanceTimersByTime });
     showPopover.mockReset();
     hidePopover.mockReset();
     Object.assign(HTMLElement.prototype, { showPopover, hidePopover });
   });
   afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
     const proto = HTMLElement.prototype as Partial<Record<"showPopover" | "hidePopover", unknown>>;
     delete proto.showPopover;
     delete proto.hidePopover;
@@ -56,7 +62,7 @@ describe("TitlePreview", () => {
     const u = user();
     renderPreview();
     await u.click(trigger());
-    await act(() => wait(500));
+    act(() => vi.advanceTimersByTime(500));
     expect(card()).toBeInTheDocument();
   });
 
@@ -64,10 +70,10 @@ describe("TitlePreview", () => {
     const u = user();
     renderPreview();
     await u.hover(trigger());
-    await act(() => wait(350));
+    act(() => vi.advanceTimersByTime(350));
     expect(card()).toBeInTheDocument();
     await u.click(trigger());
-    await act(() => wait(500));
+    act(() => vi.advanceTimersByTime(500));
     expect(card()).toBeInTheDocument();
     expect(hidePopover).not.toHaveBeenCalled();
   });
@@ -111,14 +117,14 @@ describe("TitlePreview", () => {
     renderPreview();
     await u.hover(trigger());
     expect(card()).toBeNull();
-    await act(() => wait(250));
+    act(() => vi.advanceTimersByTime(250));
     expect(card()).toBeNull();
-    await act(() => wait(100));
+    act(() => vi.advanceTimersByTime(100));
     expect(card()).toBeInTheDocument();
     expect(trigger()).toHaveAttribute("aria-expanded", "true");
 
     await u.unhover(trigger());
-    await act(() => wait(300));
+    act(() => vi.advanceTimersByTime(300));
     expect(card()).toBeNull();
   });
 
@@ -126,9 +132,9 @@ describe("TitlePreview", () => {
     const u = user();
     renderPreview();
     await u.hover(trigger());
-    await act(() => wait(100));
+    act(() => vi.advanceTimersByTime(100));
     await u.unhover(trigger());
-    await act(() => wait(500));
+    act(() => vi.advanceTimersByTime(500));
     expect(card()).toBeNull();
   });
 
@@ -136,9 +142,9 @@ describe("TitlePreview", () => {
     const u = user();
     renderPreview();
     await u.hover(trigger());
-    await act(() => wait(300));
+    act(() => vi.advanceTimersByTime(300));
     await u.hover(screen.getByRole("dialog"));
-    await act(() => wait(500));
+    act(() => vi.advanceTimersByTime(500));
     expect(card()).toBeInTheDocument();
   });
 
