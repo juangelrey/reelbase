@@ -32,3 +32,101 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  test-integrity:
+    name: test-integrity
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # Full history, so the script can diff the PR's head against where it left the base.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      # Runs the base branch's copy of the script, not the PR's, so a PR cannot change the gate that judges it.
+      # No install: the script uses only Node built-ins.
+      # The diff is read with the base branch's attributes, and code files are always diffed as text. Otherwise
+      # git hides a file's lines behind "Binary files differ" when the PR's own .gitattributes marks it `-diff`,
+      # or when the file holds a NUL byte. GIT_ATTR_SOURCE needs git 2.40; .git/info/attributes outranks every .gitattributes.
+      - name: Run the base branch's copy of the gate
+        env:
+          GIT_ATTR_SOURCE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ! git cat-file -e "$BASE_SHA:scripts/test-integrity.mjs" 2>/dev/null; then
+            echo "::notice title=test-integrity skipped::The base branch has no scripts/test-integrity.mjs yet, so there is no trusted copy to run."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/base"
+          git archive "$BASE_SHA" scripts | tar -x -C "$RUNNER_TEMP/base"
+          mkdir -p .git/info
+          printf '%s diff\n' '*.[jt]s' '*.[jt]sx' '*.[cm][jt]s' '*.[cm][jt]sx' > .git/info/attributes
+          node "$RUNNER_TEMP/base/scripts/test-integrity.mjs" "$BASE_SHA" "$HEAD_SHA"
+
+  # Informs, never gates: every step ends green whatever the verdict.
+  door:
+    name: door
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The only job that may write, and only PR comments. The trigger stays `pull_request`, never
+    # `pull_request_target`, so a PR from a fork gets a read-only token.
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # Full history for the diff; the token is not left in .git/config, since the checkout is the PR's code.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The version file is the PR's: when it cannot be installed, the job goes on with the runner's own Node.
+      - uses: actions/setup-node@v7
+        continue-on-error: true
+        with:
+          node-version-file: .nvmrc
+      # Runs the base branch's copy of the script, not the PR's, so a PR cannot change its own verdict.
+      # With no copy on the base branch, or when the script fails, the door is one-way. The diff is read as in
+      # the test-integrity job: with the base branch's attributes, and code files always as text.
+      - name: Classify the diff with the base branch's copy of the script
+        env:
+          GIT_ATTR_SOURCE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          one_way() { printf '## Door check\n\n%s\n\n**Door:** one-way\n' "$1"; }
+          if ! git cat-file -e "$BASE_SHA:scripts/door.mjs" 2>/dev/null; then
+            report=$(one_way 'The base branch has no `scripts/door.mjs` yet, so there is no trusted copy to run.')
+          else
+            mkdir -p "$RUNNER_TEMP/base"
+            git archive "$BASE_SHA" scripts | tar -x -C "$RUNNER_TEMP/base"
+            mkdir -p .git/info
+            printf '%s diff\n' '*.[jt]s' '*.[jt]sx' '*.[cm][jt]s' '*.[cm][jt]sx' > .git/info/attributes
+            report=$(node "$RUNNER_TEMP/base/scripts/door.mjs" --base "$BASE_SHA" --head "$HEAD_SHA") ||
+              report=$(one_way 'The door script failed; see the job log.')
+          fi
+          printf '<!-- door-check -->\n%s\n\nHead: `%s`\n' "$report" "$HEAD_SHA" > "$RUNNER_TEMP/door.md"
+          cat "$RUNNER_TEMP/door.md" >> "$GITHUB_STEP_SUMMARY"
+      # One comment, updated in place: the bot's own comment that starts with the marker. Skipped on a
+      # PR from a fork, whose token cannot write; the job summary is enough there.
+      - name: Create or update the PR comment
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENTS: repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments
+        run: |
+          # No pipe, so a failed listing stops the step here and no second comment is posted.
+          ids=$(gh api --paginate "$COMMENTS" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- door-check -->"))) | .id')
+          id=${ids%%$'\n'*}
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/door.md" --silent
+          else
+            gh api --method POST "$COMMENTS" -F body=@"$RUNNER_TEMP/door.md" --silent
+          fi
