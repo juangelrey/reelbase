@@ -324,8 +324,8 @@ describe("analyze", () => {
     expect(result.reports).toEqual([]);
   });
 
-  it("starts with no report rules", () => {
-    expect(reportRules).toEqual([]);
+  it("has rules in both lists", () => {
+    expect(reportRules.length).toBeGreaterThan(0);
     expect(failRules.length).toBeGreaterThan(0);
   });
 });
