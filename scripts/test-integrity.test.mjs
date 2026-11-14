@@ -476,6 +476,37 @@ describe("CLI", () => {
     expect(result.stdout).toContain(`${path}:1 ts-ignore`);
   });
 
+  // Outside CI nothing pins the attributes, so the gate itself must read code files as text.
+  it("fails a .only added to a file that git takes for binary because it holds a NUL byte", () => {
+    const base = startRepo();
+    const head = commit({ "src/a.test.ts": "it('a', () => {});\nconst nul = '\0';\nit.only('b', () => {});\n" });
+
+    const result = runCli([base, head]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("src/a.test.ts:3 only");
+  });
+
+  it("reports a skip added to a file that git takes for binary because it holds a NUL byte", () => {
+    const base = startRepo();
+    const head = commit({ "src/a.test.ts": "it('a', () => {});\nconst nul = '\0';\nit.skip('b', () => {});\n" });
+
+    const result = analyzeRange(base, head, { cwd: repo });
+
+    expect(result.reports).toEqual([{ rule: "skip", file: "src/a.test.ts", line: 3 }]);
+  });
+
+  it("fails a .only in a file that a .gitattributes already on the base branch marks -diff", () => {
+    startRepo();
+    const base = commit({ "src/.gitattributes": "*.ts -diff\n" });
+    const head = commit({ "src/a.test.ts": "it('a', () => {});\nit.only('b', () => {});\n" });
+
+    const result = runCli([base, head]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("src/a.test.ts:2 only");
+  });
+
   it("writes every finding with file, line and rule to the job summary", () => {
     const base = startRepo();
     const head = commit({

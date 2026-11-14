@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { classify, classifyFile, classifyRange, formatMarkdown, parseNameStatus } from "./door.mjs";
+import { classify, classifyFile, classifyRange, formatMarkdown, parseModes, parseNameStatus } from "./door.mjs";
 
 const CLI = fileURLToPath(new URL("./door.mjs", import.meta.url));
 
@@ -87,6 +87,10 @@ describe("classifyFile: one-way rules", () => {
     [".claude/settings.json", "agent instructions"],
     ["CLAUDE.md", "agent instructions"],
     ["AGENTS.md", "agent instructions"],
+    [".gitattributes", "git attributes"],
+    ["src/components/.gitattributes", "git attributes"],
+    ["docs/.gitattributes", "git attributes"],
+    ["e2e/.gitattributes", "git attributes"],
   ])("%s edited is one-way (%s)", (path, reason) => {
     const result = classifyFile(edited(path));
 
@@ -167,6 +171,31 @@ describe("classifyFile: one-way rules", () => {
 
     expect(result.class).toBe("one-way");
     expect(result.reason).toContain("persisted data");
+  });
+});
+
+describe("classifyFile: file kinds", () => {
+  it.each([
+    ["120000", "symbolic link"],
+    ["160000", "submodule"],
+  ])("a file of mode %s under a two-way directory is one-way (%s)", (mode, reason) => {
+    expect(classifyFile({ ...added("src/components/thing"), mode })).toEqual({ file: "src/components/thing", class: "one-way", reason });
+  });
+
+  it("an ordinary file's mode leaves its path rules in charge", () => {
+    expect(classifyFile({ ...added("src/components/card.tsx"), mode: "100644" }).class).toBe("two-way");
+  });
+});
+
+describe("parseModes", () => {
+  it("maps each path to its mode at head", () => {
+    const text = ":000000 120000 0000000 1111111 A\0src/components/link.tsx\0:100644 100755 2222222 3333333 M\0e2e/run.ts\0";
+
+    expect(parseModes(text)).toEqual(new Map([["src/components/link.tsx", "120000"], ["e2e/run.ts", "100755"]]));
+  });
+
+  it("returns an empty map for an empty diff", () => {
+    expect(parseModes("")).toEqual(new Map());
   });
 });
 
@@ -501,6 +530,77 @@ describe("CLI", () => {
       verdict: "one-way",
       files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
       integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("is one-way when the skipped test is in a file that git takes for binary because it holds a NUL byte", () => {
+    startRepo();
+    const base = commit({ "src/components/card.test.tsx": CARD_TEST });
+    const head = commit({
+      "src/components/card.test.tsx": CARD_TEST.replace('it("links"', `it.${"skip"}("links"`) + "const nul = '\0';\n",
+    });
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("is one-way for a .gitattributes under a two-way directory", () => {
+    const base = startRepo();
+    const head = commit({ "src/components/.gitattributes": "*.tsx -diff\n" });
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/.gitattributes", class: "one-way", reason: expect.stringContaining("git attributes") }],
+      integrity: [],
+    });
+  });
+
+  it("still sees a skipped test once a .gitattributes that marks test files -diff is on the base branch", () => {
+    startRepo();
+    const base = commit({ "src/components/.gitattributes": "*.tsx -diff\n", "src/components/card.test.tsx": CARD_TEST });
+    const head = commit({ "src/components/card.test.tsx": CARD_TEST.replace('it("links"', `it.${"skip"}("links"`) });
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/card.test.tsx", class: "two-way", reason: expect.any(String) }],
+      integrity: [{ file: "src/components/card.test.tsx", line: 5, rule: "skip", reason: "test removed or skipped" }],
+    });
+  });
+
+  it("is one-way when a symbolic link is added under a two-way directory", () => {
+    const base = startRepo();
+    symlinkSync("../../package.json", join(repo, "src/components/link.tsx"));
+    const head = commit({});
+
+    const run = runCli(["--base", base, "--head", head, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/link.tsx", class: "one-way", reason: "symbolic link" }],
+      integrity: [],
+    });
+  });
+
+  it("is one-way when a submodule is added under a two-way directory", () => {
+    const base = startRepo();
+    git("update-index", "--add", "--cacheinfo", `160000,${base},src/components/vendor`);
+    git("commit", "-q", "-m", "c");
+
+    const run = runCli(["--base", base, "--json"]);
+
+    expect(JSON.parse(run.stdout)).toEqual({
+      verdict: "one-way",
+      files: [{ file: "src/components/vendor", class: "one-way", reason: "submodule" }],
+      integrity: [],
     });
   });
 

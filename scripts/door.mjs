@@ -20,6 +20,7 @@ import { oneWayFindings } from "./test-integrity.mjs";
  *   status: "added" | "modified" | "deleted" | "renamed" | "other",
  *   path: string,            // path at head; for a deleted file, its path at base
  *   oldPath: string | null,  // path at base; null for an added file
+ *   mode?: string,           // git's file mode at head, such as "100644"; "000000" for a deleted file
  * }} Change
  * @typedef {{ file: string, class: Door, reason: string }} FileDoor  file is the Change's path
  * @typedef {import("./test-integrity.mjs").Finding} Finding
@@ -53,12 +54,29 @@ export function parseNameStatus(text) {
   return changes;
 }
 
+/**
+ * Parses `git diff --raw --no-renames -z` output into the mode each path has at head.
+ * @param {string} text
+ * @returns {Map<string, string>}
+ */
+export function parseModes(text) {
+  const fields = text.split("\0");
+  const modes = new Map();
+  for (let i = 0; i + 1 < fields.length; i += 2) modes.set(fields[i + 1], fields[i].split(" ")[1]);
+  return modes;
+}
+
+/** File kinds that are one-way wherever they are: what they bring in is not in the diff. */
+const ONE_WAY_MODE = { 120000: "symbolic link", 160000: "submodule" };
+
 // File-name rules match in any directory: a nested package.json or AGENTS.md is no safer than the root one.
 // One-way patterns ignore case, so a differently-cased name cannot slip past them.
 /** Checked first, whatever the change does to the file. @type {{ pattern: RegExp, reason: string }[]} */
 const ONE_WAY = [
   { pattern: /(^|\/)(package\.json|pnpm-lock\.yaml|\.nvmrc)$/i, reason: "dependencies" },
   { pattern: /^\.github\//i, reason: "CI" },
+  // Attributes decide how git diffs every file beside and below them, so they can blind this script and the gate.
+  { pattern: /(^|\/)\.gitattributes$/i, reason: "git attributes" },
   {
     pattern: /(^|\/)(next\.config\.[^/]+|vercel\.json|tsconfig\.json|(eslint|postcss|vitest|playwright)\.config\.[^/]+|vitest\.setup\.[^/]+)$/i,
     reason: "framework or deploy config",
@@ -109,6 +127,7 @@ function classifyPath(path, removed) {
 export function classifyFile(change) {
   const file = change.path;
   if (change.status === "other") return { file, class: "one-way", reason: "unrecognised kind of change" };
+  if (ONE_WAY_MODE[change.mode]) return { file, class: "one-way", reason: ONE_WAY_MODE[change.mode] };
   if (change.status !== "renamed") return { file, ...classifyPath(file, change.status === "deleted") };
 
   const from = classifyPath(change.oldPath, true);
@@ -142,13 +161,16 @@ export function classifyRange(base, head = "HEAD", { cwd = process.cwd() } = {})
   for (const ref of [base, head]) {
     if (ref.startsWith("-")) throw new Error(`a ref cannot start with "-": ${ref}`);
   }
-  const text = execFileSync("git", ["diff", "--name-status", "-M", "-z", "--no-ext-diff", `${base}...${head}`, "--"], {
-    cwd,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  return classify(parseNameStatus(text), oneWayFindings(base, head, { cwd }));
+  const diff = (...format) =>
+    execFileSync("git", ["diff", ...format, "-z", "--no-ext-diff", `${base}...${head}`, "--"], {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  const modes = parseModes(diff("--raw", "--no-renames"));
+  const changes = parseNameStatus(diff("--name-status", "-M")).map((change) => ({ ...change, mode: modes.get(change.path) }));
+  return classify(changes, oneWayFindings(base, head, { cwd }));
 }
 
 /**
