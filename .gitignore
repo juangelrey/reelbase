@@ -4,6 +4,8 @@ out/
 coverage/
 test-results/
 playwright-report/
+# The Vercel bypass cookie saved by e2e/global-setup.ts. It is written to $RUNNER_TEMP, not to the repo.
+vercel-bypass-state.json
 .playwright-mcp/
 next-env.d.ts
 *.tsbuildinfo
