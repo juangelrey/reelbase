@@ -1,7 +1,7 @@
 # Software factory plan
 
-Status on 2026-11-15. The plan to make Reelbase's build pipeline run unattended: you approve a PRD,
-and the change reaches production with no further action from you.
+Status on 2026-11-15: **the goal is reached.** The plan to make Reelbase's build pipeline run
+unattended: you approve a PRD, and the change reaches production with no further action from you.
 
 ## Goal and limit
 
@@ -21,11 +21,11 @@ PRD until you answer it.
 
 | Step | State |
 |---|---|
-| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121, #135, #147) |
-| The merge | Done. A green two-way PR merges itself (#135, #147) |
-| Closing the PRD's issues after the deploy | Done. `smoke` closes them (#147) |
+| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121, #135, #147, #153, #158) |
+| The merge | Done. A green two-way PR merges itself (#135, #147, #153, #158) |
+| Closing the PRD's issues after the deploy | Done. `smoke` closes them (#147, #153, #158) |
 | Watching production | Done. A failed smoke test opens a `bug` issue and emails you (#142) |
-| Starting a run | Works: the `approved` label started the run for #143. Two more PRDs to go. Phase 4 |
+| Starting a run | Done. The `approved` label started the runs for #143, #149 and #154 |
 
 ## Path to the goal
 
@@ -35,8 +35,8 @@ One step at a time, in this order.
 |---|---|---|
 | Phase 3 | One workflow file, no secrets | Done (#141) |
 | Settings | Require `test-integrity` and `e2e-preview` | Done |
-| Phase 4 | The trigger | Set up. 1 of 3 PRDs done |
-| | **Goal reached** | After two more PRDs |
+| Phase 4 | The trigger | Done. 3 of 3 PRDs (#143, #149, #154) |
+| | **Goal reached** | 2026-11-15 |
 
 **Rules for every phase**
 
@@ -125,7 +125,7 @@ feature flags; Sentry.
 Head branches are deleted after a merge. E2E against the preview of the same build is the real protection before the merge, which is
 why the production smoke test can be thin.
 
-### Phase 4: start
+### Phase 4: start. Done
 
 **Goal:** putting `approved` on a PRD is your last action.
 
@@ -158,7 +158,18 @@ read the skill's files and states where the task starts and ends.
 **Not in this phase:** restarting parked work, which stays a **Run now** by you; any skill change.
 
 **Done when:** a PRD you label reaches production with no other action from you, three PRDs in a
-row. **1 of 3:** #143, about 22 minutes from the label to production, issues closed.
+row. All three were observed on 2026-11-15, each merged and closed by `github-actions[bot]`.
+
+| PRD | Label to production | PR | Smoke run |
+|---|---|---|---|
+| #143 | about 22 minutes | #147 | 43719518273 |
+| #149 | about 15 minutes | #153 | 43725705254 |
+| #154 | about 17 minutes | #158 | 43727704356 |
+
+- #143's first label started a run that stopped on the Skill tool. The prompt was fixed and the
+  label removed and added again; the time is counted from that second label. #149 and #154 ran on
+  the same prompt from their first label.
+- All three were small product changes with two tickets each and none parked.
 
 **Rules from here on**
 
@@ -226,9 +237,8 @@ Beyond the goal and outside the phases. Each needs your decision.
 
 ## What dark means for safety
 
-**Enforced by GitHub** on every merge: lint, types, unit tests, the build and the path rules of the
-door script. `test-integrity` and E2E on the preview run on every PR but hold nothing until they
-are required, before Phase 4.
+**Enforced by GitHub** on every merge: lint, types, unit tests, the build, the path rules of the
+door script, `test-integrity` and E2E on the preview.
 
 **Done by the run, not enforced:** the two reviews before the PR opens.
 
@@ -315,14 +325,17 @@ Only facts a remaining step depends on.
 | The code owner rule passes when the PR's author is the code owner | #123, ruleset log result `pass` |
 | Hobby rolls back one deployment only; after a rollback new pushes do not go live until one is promoted | Vercel docs, instant rollback |
 | A cloud run starts in auto mode, which blocks "merging a pull request no human has approved" | Claude Code docs, scheduled tasks and permission modes |
-| An issue trigger can filter on Labels and State; the label started a run in 24 seconds | Task `reelbase-factory`, runs of 2026-11-15 for #143 |
+| An issue trigger can filter on Labels and State; the label started a run in 24 seconds | Task `reelbase-factory`, runs of 2026-11-15 for #143, #149 and #154 |
 | Events above the task's hourly cap are dropped | Claude Code docs, scheduled tasks, read 2026-11-15 |
 | A triggered run cannot start a skill marked `disable-model-invocation`; it can read and follow the skill's files | First run for #143 stopped; the second built #147 |
 | `smoke` closes a bot-merged PR's issues after the deploy, and opens a `bug` issue on a failure | #143 to #146 after #147; #142 |
 | Cloud runs comment and label as you, through the Claude GitHub App | Issue events on #102, comments on #121 |
+| Opening a PR in a cloud run starts a watch that says to stay until the merge; the run followed the prompt and ended the watch | Reported by the run for #154; not checked outside it |
 
 Not yet proven:
 
+- A PRD with a new page, stored data or a parked ticket, started by the trigger. The three PRDs of
+  Phase 4 were small filters and a header count.
 - A run can see which event started it. The plan does not depend on it.
 - What happens when a production build fails: Vercel sends no `success` event, so `smoke` does not
   run and no `bug` issue opens. The PRD's issues stay open.
@@ -332,9 +345,19 @@ Not yet proven:
 Not in any phase. Nothing here is built unless you pull it into a PRD.
 
 - The cloud session's hook re-prompts the run about unpushed commits while the work branch is
-  local. It costs a few tokens each time.
-- In the cloud, the installed Playwright expects another Chromium build. Tried fix: the environment's
-  setup script runs `pnpm exec playwright install chromium`.
+  local: three times in the run for #154, which held each time. An early push would cost one
+  preview build and one e2e run; it cannot merge anything. A sentence in `autonomous.md` telling
+  the run to ignore the hook until the PR step can ride along with the next skill change.
+- In the cloud, the installed Playwright expects another Chromium build, so reviewers cannot run
+  e2e before the push. Tried fix: the environment's setup script runs
+  `pnpm exec playwright install chromium`. The run for #154 reported that the download fails and
+  that a browser is installed at `/opt/pw-browsers/chromium`. Not verified. Pull this forward the
+  first time a red `e2e-preview` costs you an action.
+- Product: the no-results text on home browse ignores the decade filter (`emptyMessage` in
+  `src/app/page.tsx`), so `/?decade=1990` with no results names no filter.
+- Product: the list of home browse filters is written by hand in three places, so each new filter
+  needs three edits.
+- Product: no test checks that changing region keeps `runtime` or `language`.
 - In the cloud no TMDB token is set, so agents build a stand-in from fixtures for local E2E. The
   run for #143 reported that the session's proxy may supply TMDB credentials. Not verified.
 - A ticket can narrow a Behaviour line without saying so: #146 checked one page where the PRD said
