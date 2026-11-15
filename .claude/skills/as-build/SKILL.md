@@ -35,9 +35,11 @@ Start from a clean working tree: if it has uncommitted changes, stop and ask the
 
 ## Flag
 
-When the `prd` names a flag, everything it changes for a visitor sits behind `isFlagOn("<key>")` from `src/lib/flags/flags.ts`, called in server code, and with the flag off the app behaves as on `main`. Tests cover both states.
+When the `prd` names a flag, everything it changes for a visitor sits behind `isFlagOn("<key>")` from `src/lib/flags/flags.ts`, called in server code, and with the flag off the app behaves as it did before the change. Tests cover both states.
 
-Before opening the PR, create the flag through the LaunchDarkly connector, in project `reelbase`: boolean, with the PRD's key, serving `true` in every environment. In `auto` and `dark` the coordinator does this, not an implementer. A flag that serves `false` turns the feature off, and a missing flag leaves it on: if you cannot leave the flag serving `true` everywhere, leave no flag and say so in the PR body.
+Before opening the PR, create the flag through the LaunchDarkly connector, in project `reelbase`: a boolean with the PRD's key that serves `true` when on and `false` when off. Turn it on in every environment. Turning it off in LaunchDarkly is then what turns the feature off. In `auto` and `dark` the coordinator does this, not an implementer.
+
+A flag that is off hides the feature, and a missing flag leaves it on. So if you cannot turn the flag on in every environment, delete it and say so in the PR body.
 
 ## PR body
 
