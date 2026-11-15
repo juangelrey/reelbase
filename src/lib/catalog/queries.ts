@@ -138,7 +138,21 @@ function releaseDateParams({ decade, sort }: BrowseState, kind: TitleKind): Tmdb
   return params;
 }
 
-/** A page of movies by genre, service, decade and sort. */
+/** The vote count a rating-filtered browse asks for in every sort: the Top rated sort's own floor. */
+const RATING_VOTE_FLOOR = 200;
+
+/**
+ * Discover params for a minimum rating: at least that average vote (TMDB's value, unrounded), from titles with
+ * enough votes for it to mean something. Spread after `sortParams`, so its vote floor, the larger of its own and
+ * the sort's, replaces the sort's. None for Any, which leaves the sort's floor as it is.
+ */
+function ratingParams({ rating, sort }: BrowseState, kind: TitleKind): TmdbParams {
+  if (rating === undefined) return {};
+  const sortFloor = Number(sortParams(sort, kind)["vote_count.gte"] ?? 0);
+  return { "vote_average.gte": rating, "vote_count.gte": Math.max(RATING_VOTE_FLOOR, sortFloor) };
+}
+
+/** A page of movies by genre, service, decade, rating and sort. */
 export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbMovieListItem>>("/discover/movie", {
@@ -148,11 +162,12 @@ export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSum
     page,
     ...sortParams(sort, "movie"),
     ...releaseDateParams(state, "movie"),
+    ...ratingParams(state, "movie"),
   });
   return toPaged(response, toSummary);
 }
 
-/** A page of TV series by TV genre, service, decade and sort. */
+/** A page of TV series by TV genre, service, decade, rating and sort. */
 export async function discoverShows(state: BrowseState): Promise<Paged<ShowSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbTvListItem>>("/discover/tv", {
@@ -162,6 +177,7 @@ export async function discoverShows(state: BrowseState): Promise<Paged<ShowSumma
     page,
     ...sortParams(sort, "tv"),
     ...releaseDateParams(state, "tv"),
+    ...ratingParams(state, "tv"),
   });
   return toPaged(response, toShowSummary);
 }

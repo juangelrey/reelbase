@@ -73,6 +73,17 @@ describe("BrowseControls decade pills", () => {
   });
 });
 
+describe("BrowseControls rating pills", () => {
+  it("shows the rating row under the decade row, with the selected rating current", () => {
+    renderControls({ rating: 7 });
+    const decades = screen.getByRole("navigation", { name: "Decade" });
+    const nav = screen.getByRole("navigation", { name: "Rating" });
+    expect(decades.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "7+" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: "Any" })).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("BrowseControls clear filters link", () => {
   it("shows one link to clear a selected genre", () => {
     renderControls({ genres: [28] });

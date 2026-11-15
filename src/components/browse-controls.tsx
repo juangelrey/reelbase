@@ -11,6 +11,7 @@ import {
 } from "@/lib/catalog/browse-params";
 import type { Genre } from "@/lib/catalog/types";
 import { DecadeFilter } from "./decade-filter";
+import { RatingFilter } from "./rating-filter";
 
 const SORT_LABELS: Record<SortKey, string> = {
   popularity: "Popular",
@@ -57,7 +58,7 @@ const FOCUS = "rounded focus-visible:outline-2 focus-visible:outline-offset-2 fo
 /**
  * The home page's filter bar, which stays at the top of the window while the results scroll. Its first row holds
  * `children` (the Movies / TV switch) and the sort; under it the genres run on one line that scrolls sideways, and
- * under them the decade pills.
+ * under them the decade pills, then the rating pills.
  * A genre link toggles its genre in the selection, and "All" clears it. Any change starts again from page 1.
  */
 export function BrowseControls({ genres, state, children }: BrowseControlsProps) {
@@ -113,6 +114,7 @@ export function BrowseControls({ genres, state, children }: BrowseControlsProps)
         </ul>
       </nav>
       <DecadeFilter state={state} />
+      <RatingFilter state={state} />
       {hasFilters(state) && (
         <Link href={clearFiltersHref(state)} className={`${FOCUS} inline-block text-xs text-zinc-400 underline hover:text-strong`}>
           Clear filters
