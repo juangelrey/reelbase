@@ -433,6 +433,20 @@ describe("Home page runtime clear filters", () => {
   });
 });
 
+describe("Home page language clear filters", () => {
+  it("shows Clear filters for ?language=es alone, without the language in its href", async () => {
+    stubTmdb();
+    await renderHome({ language: "es" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/");
+  });
+
+  it("keeps type, sort and a URL region when it clears the language", async () => {
+    stubTmdb();
+    await renderHome({ type: "tv", language: "ko", runtime: "120", region: "ES", sort: "rating" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?type=tv&region=ES&sort=rating");
+  });
+});
+
 describe("Home page region", () => {
   it("lets ?region= beat the cookie and keeps it in links", async () => {
     stubTmdb();
@@ -651,6 +665,13 @@ describe("Home page streaming services", () => {
     [{ rating: "7", runtime: "120" }, "No titles rated 7+ under 120 min to show. Try removing one, or show all titles."],
     [{ genre: "28", providers: "8", rating: "7", runtime: "150" }, "No titles rated 7+ under 150 min match this genre on this service. Try removing one, or show all titles."],
     [{ runtime: "100" }, "No titles to show right now."],
+    [{ language: "es" }, "No titles in Spanish to show. Try another one, or show all titles."],
+    [{ type: "tv", language: "ko" }, "No series in Korean to show. Try another one, or show all series."],
+    [{ genre: "28", language: "fr" }, "No titles in French match this genre. Try removing one, or show all titles."],
+    [{ providers: "8", language: "ja" }, "No titles in Japanese stream on this service. Try removing one, or show all titles."],
+    [{ runtime: "90", language: "es" }, "No titles under 90 min in Spanish to show. Try removing one, or show all titles."],
+    [{ genre: "28", providers: "8", rating: "7", runtime: "150", language: "en" }, "No titles rated 7+ under 150 min in English match this genre on this service. Try removing one, or show all titles."],
+    [{ language: "EN" }, "No titles to show right now."],
   ])("names the active filters when nothing matches %o", async (params, message) => {
     stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
     await renderHome(params);

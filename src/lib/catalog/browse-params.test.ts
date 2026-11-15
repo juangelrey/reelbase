@@ -456,6 +456,11 @@ describe("clearFiltersHref", () => {
     expect(clearFiltersHref({ ...filtered, rating: 8, runtime: 120 })).toBe("/?type=tv&region=ES&sort=rating");
     expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, runtime: 90 })).toBe("/?type=tv&region=ES&sort=rating");
   });
+
+  it("drops the language too", () => {
+    expect(clearFiltersHref({ ...filtered, runtime: 120, language: "es" })).toBe("/?type=tv&region=ES&sort=rating");
+    expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, language: "ja" })).toBe("/?type=tv&region=ES&sort=rating");
+  });
 });
 
 describe("hasFilters", () => {
@@ -477,13 +482,18 @@ describe("hasFilters", () => {
     expect(hasFilters(parseBrowseParams({ runtime: "90" }, known, "US"))).toBe(true);
   });
 
+  it("is true with a language alone", () => {
+    expect(hasFilters({ ...base, language: "ko" })).toBe(true);
+    expect(hasFilters(parseBrowseParams({ language: "es" }, known, "US"))).toBe(true);
+  });
+
   it("is false with none of them, whatever the type, sort, region or page", () => {
     expect(hasFilters(base)).toBe(false);
     expect(hasFilters({ ...base, kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 })).toBe(false);
   });
 
   it("is false for raw filter params the parse drops", () => {
-    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5", runtime: "100" }, known, "US"))).toBe(false);
+    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5", runtime: "100", language: "EN" }, known, "US"))).toBe(false);
   });
 });
 
