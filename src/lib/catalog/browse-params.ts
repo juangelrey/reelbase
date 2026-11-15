@@ -19,6 +19,11 @@ export const RATINGS = [6, 7, 8] as const;
 
 export type Rating = (typeof RATINGS)[number];
 
+/** The maximum runtimes a browse can ask for, in minutes, shortest first (`runtime=120` is under 120 minutes). */
+export const RUNTIMES = [90, 120, 150] as const;
+
+export type Runtime = (typeof RUNTIMES)[number];
+
 export interface BrowseState {
   /** Movies or TV series; `type=tv` in the URL, movies when absent. */
   kind: TitleKind;
@@ -52,6 +57,11 @@ export interface BrowseState {
    * without it reads as Any.
    */
   rating?: Rating;
+  /**
+   * The runtime titles stay under, in minutes (episode runtime for TV); absent for Any. `runtime=120` in the URL.
+   * Optional so a state without it reads as Any.
+   */
+  runtime?: Runtime;
 }
 
 export function firstParam(value: SearchParamValue): string | undefined {
@@ -115,6 +125,12 @@ function parseRating(value: SearchParamValue): Rating | undefined {
   return RATINGS.find((rating) => String(rating) === raw);
 }
 
+/** A listed runtime, e.g. "120"; anything else (`60`, `100`, `90.5`, `090`, empty) reads as Any. */
+function parseRuntime(value: SearchParamValue): Runtime | undefined {
+  const raw = firstParam(value);
+  return RUNTIMES.find((runtime) => String(runtime) === raw);
+}
+
 const NO_PROVIDERS: ReadonlySet<number> = new Set();
 
 /**
@@ -143,21 +159,23 @@ export function parseBrowseParams(
     providers: parseProviders(params.providers, listedProviderIds),
     decade: parseDecade(params.decade),
     rating: parseRating(params.rating),
+    runtime: parseRuntime(params.runtime),
   };
 }
 
 /**
- * A home page URL. `type` is set only for TV, so movie links stay as they were before TV browse, `decade`
- * and `rating` only when one is set, and `region` only when it came from the URL. List separators stay literal commas
- * (`genre=28,35`, `providers=8,337`), not `%2C`, so links read as the spec writes them.
+ * A home page URL. `type` is set only for TV, so movie links stay as they were before TV browse, `decade`,
+ * `rating` and `runtime` only when one is set, and `region` only when it came from the URL. List separators stay
+ * literal commas (`genre=28,35`, `providers=8,337`), not `%2C`, so links read as the spec writes them.
  */
-export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating }: BrowseState): string {
+export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating, runtime }: BrowseState): string {
   const query = new URLSearchParams();
   if (kind === "tv") query.set("type", "tv");
   if (genres.length > 0) query.set("genre", genres.join(","));
   if (providers.length > 0) query.set("providers", providers.join(","));
   if (decade !== undefined) query.set("decade", String(decade));
   if (rating !== undefined) query.set("rating", String(rating));
+  if (runtime !== undefined) query.set("runtime", String(runtime));
   if (regionFromUrl) query.set("region", region);
   if (sort !== DEFAULT_SORT) query.set("sort", sort);
   if (page > 1) query.set("page", String(page));

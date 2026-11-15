@@ -364,6 +364,54 @@ describe("discoverTitles", () => {
     expect(params.has("vote_average.gte")).toBe(false);
     expect(params.get("vote_count.gte")).toBe(voteCount);
   });
+
+  it.each([90, 120, 150] as const)("with runtime %i, asks for 1 to one minute under it", async (runtime) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], runtime });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe(String(runtime - 1));
+  });
+
+  it("sends a runtime with genre, service, decade and rating filters", async () => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [18], sort: "release", page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("119");
+    expect(params.get("with_genres")).toBe("18");
+    expect(params.get("with_watch_providers")).toBe("8");
+    expect(params.get("primary_release_date.gte")).toBe("2010-01-01");
+    expect(params.get("vote_average.gte")).toBe("7");
+    expect(params.get("sort_by")).toBe("primary_release_date.desc");
+  });
+
+  it.each([
+    ["popularity", undefined],
+    ["rating", undefined],
+    ["release", undefined],
+    ["title", undefined],
+    ["popularity", 7],
+    ["release", 7],
+  ] as const)("keeps the %s sort's vote floor (rating %s) with and without a runtime", async (sort, rating) => {
+    const without = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating });
+    const withoutParams = requestedUrl(without).searchParams;
+    const withRuntime = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating, runtime: 90 });
+    const withParams = requestedUrl(withRuntime).searchParams;
+    expect(withParams.get("sort_by")).toBe(withoutParams.get("sort_by"));
+    expect(withParams.get("vote_count.gte")).toBe(withoutParams.get("vote_count.gte"));
+    expect(withParams.get("with_runtime.lte")).toBe("89");
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)("sends no runtime params without a runtime in the %s sort", async (sort) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [18], sort, page: 1, region: "US", regionFromUrl: false, providers: [8], decade: 2010, rating: 7 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("with_runtime.gte")).toBe(false);
+    expect(params.has("with_runtime.lte")).toBe(false);
+  });
 });
 
 describe("discoverShows", () => {
@@ -497,6 +545,54 @@ describe("discoverShows", () => {
     const params = requestedUrl(fetchMock).searchParams;
     expect(params.has("vote_average.gte")).toBe(false);
     expect(params.get("vote_count.gte")).toBe(voteCount);
+  });
+
+  it.each([90, 120, 150] as const)("with runtime %i, asks for 1 to one minute under it", async (runtime) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], runtime });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe(String(runtime - 1));
+  });
+
+  it("sends a runtime with genre, service, decade and rating filters", async () => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [18], sort: "release", page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("119");
+    expect(params.get("with_genres")).toBe("18");
+    expect(params.get("with_watch_providers")).toBe("8");
+    expect(params.get("first_air_date.gte")).toBe("2010-01-01");
+    expect(params.get("vote_average.gte")).toBe("7");
+    expect(params.get("sort_by")).toBe("first_air_date.desc");
+  });
+
+  it.each([
+    ["popularity", undefined],
+    ["rating", undefined],
+    ["release", undefined],
+    ["title", undefined],
+    ["popularity", 7],
+    ["release", 7],
+  ] as const)("keeps the %s sort's vote floor (rating %s) with and without a runtime", async (sort, rating) => {
+    const without = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating });
+    const withoutParams = requestedUrl(without).searchParams;
+    const withRuntime = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating, runtime: 90 });
+    const withParams = requestedUrl(withRuntime).searchParams;
+    expect(withParams.get("sort_by")).toBe(withoutParams.get("sort_by"));
+    expect(withParams.get("vote_count.gte")).toBe(withoutParams.get("vote_count.gte"));
+    expect(withParams.get("with_runtime.lte")).toBe("89");
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)("sends no runtime params without a runtime in the %s sort", async (sort) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [18], sort, page: 1, region: "US", regionFromUrl: false, providers: [8], decade: 2010, rating: 7 });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("with_runtime.gte")).toBe(false);
+    expect(params.has("with_runtime.lte")).toBe(false);
   });
 });
 
