@@ -15,6 +15,15 @@ test("Clear filters shows for a rating alone, drops it and then disappears", asy
   await page.getByRole("navigation", { name: "Rating" }).getByRole("link", { name: "8+" }).click();
   await expect(page).toHaveURL(/[?&]rating=8(&|$)/);
   await page.getByRole("link", { name: "Clear filters" }).click();
-  await expect(page).not.toHaveURL(/[?&](rating|decade|genre|providers|page)=/);
+  await expect(page).not.toHaveURL(/[?&](runtime|rating|decade|genre|providers|page)=/);
+  await expect(page.getByRole("link", { name: "Clear filters" })).toHaveCount(0);
+});
+
+test("Clear filters shows for a runtime alone, drops it and then disappears", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Runtime" }).getByRole("link", { name: "Under 90 min" }).click();
+  await expect(page).toHaveURL(/[?&]runtime=90(&|$)/);
+  await page.getByRole("link", { name: "Clear filters" }).click();
+  await expect(page).not.toHaveURL(/[?&](runtime|rating|decade|genre|providers|page)=/);
   await expect(page.getByRole("link", { name: "Clear filters" })).toHaveCount(0);
 });

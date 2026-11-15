@@ -327,6 +327,46 @@ describe("Home page decade", () => {
   });
 });
 
+describe("Home page runtime", () => {
+  it("sends the runtime to discover and keeps it in every link", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ runtime: "120", genre: "28", decade: "2010", rating: "7", sort: "release" });
+    const params = discoverUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("119");
+    const runtimes = screen.getByRole("navigation", { name: "Runtime" });
+    expect(within(runtimes).getByRole("link", { name: "Under 120 min" })).toHaveAttribute("aria-current", "true");
+    const sort = screen.getByRole("navigation", { name: "Sort" });
+    expect(within(sort).getByRole("link", { name: "Popular" })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120");
+    const media = screen.getByRole("navigation", { name: "Movies or TV" });
+    expect(within(media).getByRole("link", { name: "TV" })).toHaveAttribute("href", "/?type=tv&decade=2010&rating=7&runtime=120&sort=release");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120&sort=release&page=2");
+  });
+
+  it("sends the runtime for TV too", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ type: "tv", runtime: "90" });
+    const params = discoverUrl(fetchMock, "tv").searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("89");
+  });
+
+  it.each(["60", "100", "90.5", "090", "abc", ""])("reads ?runtime=%j as Any: the same request and links as without it", async (runtime) => {
+    const without = stubTmdb();
+    await renderHome({ genre: "28", sort: "release" });
+    const expected = discoverUrl(without).search;
+    cleanup();
+    const withBad = stubTmdb();
+    await renderHome({ genre: "28", sort: "release", runtime });
+    expect(discoverUrl(withBad).search).toBe(expected);
+    const runtimes = screen.getByRole("navigation", { name: "Runtime" });
+    expect(within(runtimes).getByRole("link", { name: "Any" })).toHaveAttribute("aria-current", "true");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&sort=release&page=2");
+  });
+});
+
 describe("Home page rating clear filters", () => {
   it("shows Clear filters for ?rating=8 alone, without the rating in its href", async () => {
     stubTmdb();
@@ -337,6 +377,20 @@ describe("Home page rating clear filters", () => {
   it("keeps type, sort and a URL region when it clears the rating", async () => {
     stubTmdb();
     await renderHome({ type: "tv", rating: "7", region: "ES", sort: "rating" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?type=tv&region=ES&sort=rating");
+  });
+});
+
+describe("Home page runtime clear filters", () => {
+  it("shows Clear filters for ?runtime=90 alone, without the runtime in its href", async () => {
+    stubTmdb();
+    await renderHome({ runtime: "90" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/");
+  });
+
+  it("keeps type, sort and a URL region when it clears the runtime", async () => {
+    stubTmdb();
+    await renderHome({ type: "tv", runtime: "120", rating: "7", region: "ES", sort: "rating" });
     expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?type=tv&region=ES&sort=rating");
   });
 });
@@ -552,6 +606,13 @@ describe("Home page streaming services", () => {
     [{ providers: "8", rating: "6" }, "No titles rated 6+ stream on this service. Try removing one, or show all titles."],
     [{ genre: "28", providers: "8", rating: "7" }, "No titles rated 7+ match this genre on this service. Try removing one, or show all titles."],
     [{ rating: "7.5" }, "No titles to show right now."],
+    [{ runtime: "90" }, "No titles under 90 min to show. Try another one, or show all titles."],
+    [{ type: "tv", runtime: "150" }, "No series under 150 min to show. Try another one, or show all series."],
+    [{ genre: "28", runtime: "120" }, "No titles under 120 min match this genre. Try removing one, or show all titles."],
+    [{ providers: "8", runtime: "90" }, "No titles under 90 min stream on this service. Try removing one, or show all titles."],
+    [{ rating: "7", runtime: "120" }, "No titles rated 7+ under 120 min to show. Try removing one, or show all titles."],
+    [{ genre: "28", providers: "8", rating: "7", runtime: "150" }, "No titles rated 7+ under 150 min match this genre on this service. Try removing one, or show all titles."],
+    [{ runtime: "100" }, "No titles to show right now."],
   ])("names the active filters when nothing matches %o", async (params, message) => {
     stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
     await renderHome(params);

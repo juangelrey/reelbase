@@ -2,6 +2,7 @@ import {
   DECADES,
   DEFAULT_SORT,
   RATINGS,
+  RUNTIMES,
   browseHref,
   clearFiltersHref,
   hasFilters,
@@ -338,6 +339,51 @@ describe("browseHref rating", () => {
   });
 });
 
+describe("parseBrowseParams runtime", () => {
+  it("lists the maximum runtimes shortest first", () => {
+    expect(RUNTIMES).toEqual([90, 120, 150]);
+  });
+
+  it.each([90, 120, 150])("reads runtime=%i", (runtime) => {
+    expect(parseBrowseParams({ runtime: String(runtime) }, known, "US").runtime).toBe(runtime);
+  });
+
+  it("reads Any when the param is absent", () => {
+    expect(parseBrowseParams({}, known, "US").runtime).toBeUndefined();
+  });
+
+  it.each(["", "60", "100", "90.5", "090", "abc", " 90", "90.0", "180"])("reads runtime=%j as Any", (runtime) => {
+    expect(parseBrowseParams({ runtime }, known, "US").runtime).toBeUndefined();
+  });
+
+  it("uses the first value when the param repeats", () => {
+    expect(parseBrowseParams({ runtime: ["120", "90"] }, known, "US").runtime).toBe(120);
+    expect(parseBrowseParams({ runtime: ["100", "90"] }, known, "US").runtime).toBeUndefined();
+  });
+});
+
+describe("browseHref runtime", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes runtime=<n> only for a set runtime", () => {
+    expect(browseHref({ ...base, runtime: 120 })).toBe("/?runtime=120");
+    expect(browseHref({ ...base, runtime: undefined })).toBe("/");
+    expect(browseHref(base)).toBe("/");
+  });
+
+  it("writes the runtime after the rating, alongside every other param", () => {
+    expect(
+      browseHref({ ...base, kind: "tv", genres: [18], providers: [8], decade: 1990, rating: 8, runtime: 90, region: "ES", regionFromUrl: true, sort: "release", page: 2 }),
+    ).toBe("/?type=tv&genre=18&providers=8&decade=1990&rating=8&runtime=90&region=ES&sort=release&page=2");
+  });
+
+  it("round-trips a runtime with genres, services, decade, rating and sort", () => {
+    const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, rating: 6 as const, runtime: 150 as const, sort: "rating" as const, page: 3 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
+  });
+});
+
 describe("clearFiltersHref", () => {
   const filtered = { kind: "tv" as const, genres: [18], providers: [8], decade: 2010 as const, region: "ES", regionFromUrl: true, sort: "rating" as const, page: 3 };
 
@@ -357,6 +403,11 @@ describe("clearFiltersHref", () => {
     expect(clearFiltersHref({ ...filtered, rating: 8 })).toBe("/?type=tv&region=ES&sort=rating");
     expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, rating: 7 })).toBe("/?type=tv&region=ES&sort=rating");
   });
+
+  it("drops the runtime too", () => {
+    expect(clearFiltersHref({ ...filtered, rating: 8, runtime: 120 })).toBe("/?type=tv&region=ES&sort=rating");
+    expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, runtime: 90 })).toBe("/?type=tv&region=ES&sort=rating");
+  });
 });
 
 describe("hasFilters", () => {
@@ -373,13 +424,18 @@ describe("hasFilters", () => {
     expect(hasFilters(parseBrowseParams({ rating: "8" }, known, "US"))).toBe(true);
   });
 
+  it("is true with a runtime alone", () => {
+    expect(hasFilters({ ...base, runtime: 150 })).toBe(true);
+    expect(hasFilters(parseBrowseParams({ runtime: "90" }, known, "US"))).toBe(true);
+  });
+
   it("is false with none of them, whatever the type, sort, region or page", () => {
     expect(hasFilters(base)).toBe(false);
     expect(hasFilters({ ...base, kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 })).toBe(false);
   });
 
   it("is false for raw filter params the parse drops", () => {
-    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5" }, known, "US"))).toBe(false);
+    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5", runtime: "100" }, known, "US"))).toBe(false);
   });
 });
 

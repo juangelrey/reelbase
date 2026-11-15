@@ -152,7 +152,17 @@ function ratingParams({ rating, sort }: BrowseState, kind: TitleKind): TmdbParam
   return { "vote_average.gte": rating, "vote_count.gte": Math.max(RATING_VOTE_FLOOR, sortFloor) };
 }
 
-/** A page of movies by genre, service, decade, rating and sort. */
+/**
+ * Discover params for a maximum runtime: from 1 minute, so titles with no known runtime (0) drop out, to one
+ * minute under the limit, so a title of exactly that length is not shown. TMDB compares episode runtime for TV.
+ * It sets no vote floor, so each sort's stays as it is. None for Any.
+ */
+function runtimeParams({ runtime }: BrowseState): TmdbParams {
+  if (runtime === undefined) return {};
+  return { "with_runtime.gte": 1, "with_runtime.lte": runtime - 1 };
+}
+
+/** A page of movies by genre, service, decade, rating, runtime and sort. */
 export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbMovieListItem>>("/discover/movie", {
@@ -163,11 +173,12 @@ export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSum
     ...sortParams(sort, "movie"),
     ...releaseDateParams(state, "movie"),
     ...ratingParams(state, "movie"),
+    ...runtimeParams(state),
   });
   return toPaged(response, toSummary);
 }
 
-/** A page of TV series by TV genre, service, decade, rating and sort. */
+/** A page of TV series by TV genre, service, decade, rating, runtime and sort. */
 export async function discoverShows(state: BrowseState): Promise<Paged<ShowSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbTvListItem>>("/discover/tv", {
@@ -178,6 +189,7 @@ export async function discoverShows(state: BrowseState): Promise<Paged<ShowSumma
     ...sortParams(sort, "tv"),
     ...releaseDateParams(state, "tv"),
     ...ratingParams(state, "tv"),
+    ...runtimeParams(state),
   });
   return toPaged(response, toShowSummary);
 }

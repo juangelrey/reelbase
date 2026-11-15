@@ -84,6 +84,17 @@ describe("BrowseControls rating pills", () => {
   });
 });
 
+describe("BrowseControls runtime pills", () => {
+  it("shows the runtime row under the rating row, with the selected runtime current", () => {
+    renderControls({ runtime: 120 });
+    const ratings = screen.getByRole("navigation", { name: "Rating" });
+    const nav = screen.getByRole("navigation", { name: "Runtime" });
+    expect(ratings.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Under 120 min" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: "Any" })).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("BrowseControls clear filters link", () => {
   it("shows one link to clear a selected genre", () => {
     renderControls({ genres: [28] });
