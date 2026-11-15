@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { BrowseControls } from "./browse-controls";
-import type { BrowseState } from "@/lib/catalog/browse-params";
+import { clearFiltersHref, type BrowseState } from "@/lib/catalog/browse-params";
 
 const GENRES = [
   { id: 28, name: "Action" },
@@ -70,5 +70,37 @@ describe("BrowseControls decade pills", () => {
     const nav = screen.getByRole("navigation", { name: "Decade" });
     expect(within(nav).getByRole("link", { name: "2010s" })).toHaveAttribute("aria-current", "true");
     expect(within(nav).getByRole("link", { name: "All" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("BrowseControls clear filters link", () => {
+  it("shows one link to clear a selected genre", () => {
+    renderControls({ genres: [28] });
+    expect(screen.getAllByRole("link", { name: "Clear filters" })).toHaveLength(1);
+  });
+
+  it("shows one link to clear a selected service", () => {
+    renderControls({ providers: [8] });
+    expect(screen.getAllByRole("link", { name: "Clear filters" })).toHaveLength(1);
+  });
+
+  it("shows one link to clear a selected decade", () => {
+    renderControls({ decade: 2010 });
+    expect(screen.getAllByRole("link", { name: "Clear filters" })).toHaveLength(1);
+  });
+
+  it("is not shown without a genre, service or decade", () => {
+    renderControls({ kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 });
+    expect(screen.queryByRole("link", { name: "Clear filters" })).not.toBeInTheDocument();
+  });
+
+  it("is a plain link to the cleared state, never marked current", () => {
+    const state: BrowseState = { kind: "tv", genres: [18], providers: [8], decade: 2010, region: "ES", regionFromUrl: true, sort: "rating", page: 3 };
+    renderControls(state);
+    const link = screen.getByRole("link", { name: "Clear filters" });
+    expect(link.tagName).toBe("A");
+    expect(link).toHaveAttribute("href", clearFiltersHref(state));
+    expect(link).toHaveAttribute("href", "/?type=tv&region=ES&sort=rating");
+    expect(link).not.toHaveAttribute("aria-current");
   });
 });

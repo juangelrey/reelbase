@@ -1,4 +1,14 @@
-import { DECADES, DEFAULT_SORT, browseHref, parseBrowseParams, parseKind, parsePage, toggleId } from "./browse-params";
+import {
+  DECADES,
+  DEFAULT_SORT,
+  browseHref,
+  clearFiltersHref,
+  hasFilters,
+  parseBrowseParams,
+  parseKind,
+  parsePage,
+  toggleId,
+} from "./browse-params";
 
 const known = new Set([28, 878, 18]);
 
@@ -279,6 +289,41 @@ describe("browseHref decade", () => {
     const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, sort: "rating" as const, page: 3 };
     const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
     expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
+  });
+});
+
+describe("clearFiltersHref", () => {
+  const filtered = { kind: "tv" as const, genres: [18], providers: [8], decade: 2010 as const, region: "ES", regionFromUrl: true, sort: "rating" as const, page: 3 };
+
+  it("drops genre, services, decade and page, keeping type, an explicit region and sort", () => {
+    expect(clearFiltersHref(filtered)).toBe("/?type=tv&region=ES&sort=rating");
+  });
+
+  it("leaves out a region that did not come from the URL", () => {
+    expect(clearFiltersHref({ ...filtered, regionFromUrl: false })).toBe("/?type=tv&sort=rating");
+  });
+
+  it("is the bare home page when nothing else remains", () => {
+    expect(clearFiltersHref({ ...filtered, kind: "movie", sort: "popularity", regionFromUrl: false })).toBe("/");
+  });
+});
+
+describe("hasFilters", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("is true with a genre, a service or a decade", () => {
+    expect(hasFilters({ ...base, genres: [28] })).toBe(true);
+    expect(hasFilters({ ...base, providers: [8] })).toBe(true);
+    expect(hasFilters({ ...base, decade: 2010 })).toBe(true);
+  });
+
+  it("is false with none of them, whatever the type, sort, region or page", () => {
+    expect(hasFilters(base)).toBe(false);
+    expect(hasFilters({ ...base, kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 })).toBe(false);
+  });
+
+  it("is false for raw filter params the parse drops", () => {
+    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8" }, known, "US"))).toBe(false);
   });
 });
 
