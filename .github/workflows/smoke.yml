@@ -1,0 +1,163 @@
+# Smoke tests each finished Production deployment. On a pass it closes the issues that the deployed commit's
+# pull request closes, since a merge made by GITHUB_TOKEN leaves them open. On a failure it opens a `bug` issue
+# and closes nothing. Started by hand with an address, it tests that address and closes nothing whatever the result.
+name: smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: The address to test, for example a URL that fails, to prove the failure path
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  smoke:
+    name: smoke
+    # A run started by hand, or a finished Production deployment: Vercel names it `Production`, or
+    # `Production – <project>`. Previews and every other state are skipped.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment.environment, 'Production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # No checkout: the job only calls the address and the API, so no code from the repository runs.
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ADDRESS: ${{ github.event_name == 'workflow_dispatch' && inputs.address || 'https://reelbase-tau.vercel.app' }}
+      SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.deployment.sha }}
+    steps:
+      # Passes on a 200 from the home page. One retry after 30 seconds; a timeout or network error is `000`.
+      - name: Request the address
+        id: check
+        run: |
+          status() { curl -sS -L -o /dev/null -w '%{http_code}' --max-time 30 "$ADDRESS" || true; }
+          first=$(status)
+          second=""
+          if [ "$first" != "200" ]; then
+            echo "First attempt answered $first; retrying in 30 seconds."
+            sleep 30
+            second=$(status)
+          fi
+          passed=false
+          if [ "$first" = "200" ] || [ "$second" = "200" ]; then passed=true; fi
+          echo "Address $ADDRESS: first attempt $first, second attempt ${second:-not needed}, passed $passed."
+          {
+            echo "first=$first"
+            echo "second=$second"
+            echo "passed=$passed"
+          } >> "$GITHUB_OUTPUT"
+
+      # The merged pull request whose merge commit is the deployed commit; if none, the first merged one; if none,
+      # there is none. Then its closing issues: the ones still open, and the one labeled `prd`.
+      - name: Find the pull request and its closing issues
+        id: pr
+        run: |
+          pulls=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls")
+          number=$(jq -r --arg sha "$SHA" '
+            [.[] | select(.merged_at != null)] as $merged
+            | (([$merged[] | select(.merge_commit_sha == $sha)] + $merged) | first | .number) // empty
+          ' <<< "$pulls")
+          open=""
+          prd=""
+          if [ -n "$number" ]; then
+            issues=$(gh api graphql \
+              -f query='query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 100) {
+                      nodes { number state labels(first: 100) { nodes { name } } }
+                    }
+                  }
+                }
+              }' \
+              -f owner="${GITHUB_REPOSITORY%%/*}" -f name="${GITHUB_REPOSITORY#*/}" -F number="$number" \
+              --jq '.data.repository.pullRequest.closingIssuesReferences.nodes')
+            open=$(jq -r '[.[] | select(.state == "OPEN") | .number] | join(" ")' <<< "$issues")
+            prd=$(jq -r '[.[] | select(any(.labels.nodes[]; .name == "prd")) | .number] | first // empty' <<< "$issues")
+          fi
+          echo "Commit $SHA: pull request ${number:-none}, open closing issues ${open:-none}, PRD ${prd:-none}."
+          {
+            echo "number=$number"
+            echo "open=$open"
+            echo "prd=$prd"
+          } >> "$GITHUB_OUTPUT"
+
+      # Only on a pass from a Production deployment, never on a run started by hand.
+      - name: Close the pull request's issues
+        if: >-
+          github.event_name == 'deployment_status' &&
+          steps.check.outputs.passed == 'true' &&
+          steps.pr.outputs.open != ''
+        env:
+          OPEN: ${{ steps.pr.outputs.open }}
+          PR: ${{ steps.pr.outputs.number }}
+          DEPLOYMENT_ID: ${{ github.event.deployment.id }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          body="Closed by the smoke test: deployment $DEPLOYMENT_ID to $ENVIRONMENT"
+          if [ -n "$TARGET_URL" ]; then body="$body ($TARGET_URL)"; fi
+          body="$body of commit $SHA, from #$PR, answered 200 at $ADDRESS."
+          for issue in $OPEN; do
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$issue/comments" -f body="$body" --silent
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$issue" \
+              -f state=closed -f state_reason=completed --silent
+            echo "Closed #$issue."
+          done
+
+      # On any failure, including a run started by hand. It also runs when the lookup step failed, and says so.
+      # The `bug` label is applied only when it exists, never created.
+      - name: Open a bug issue
+        if: ${{ !cancelled() && steps.check.outputs.passed != 'true' }}
+        env:
+          FIRST: ${{ steps.check.outputs.first }}
+          SECOND: ${{ steps.check.outputs.second }}
+          PR: ${{ steps.pr.outputs.number }}
+          PRD: ${{ steps.pr.outputs.prd }}
+          LOOKUP: ${{ steps.pr.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Smoke test failed for ${SHA:0:7}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then title="$title (run started by hand)"; fi
+          if [ "$LOOKUP" != "success" ]; then
+            pr_line="Could not be looked up; see the workflow run."
+            prd_line="$pr_line"
+          else
+            pr_line=${PR:+#$PR}
+            pr_line=${pr_line:-No pull request was found for this commit.}
+            prd_line=${PRD:+#$PRD}
+            if [ -z "$prd_line" ]; then
+              if [ -n "$PR" ]; then prd_line="No issue labeled \`prd\` among the pull request's closing issues."
+              else prd_line="None, since there is no pull request."; fi
+            fi
+          fi
+          body=$(printf '%s\n' \
+            "The smoke test did not get a 200 from the home page." \
+            "" \
+            "- **Address tested:** $ADDRESS" \
+            "- **First attempt:** ${FIRST:-none}" \
+            "- **Second attempt (after 30 seconds):** ${SECOND:-none}" \
+            "- **Commit:** $SHA" \
+            "- **Pull request:** $pr_line" \
+            "- **PRD:** $prd_line" \
+            "- **Workflow run:** $RUN_URL" \
+            "" \
+            "No issue was closed.")
+          labels=()
+          if gh api "repos/$GITHUB_REPOSITORY/labels/bug" --silent; then labels=(-f 'labels[]=bug'); fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues" -f title="$title" -f body="$body" "${labels[@]}" \
+            --jq '"Opened " + .html_url'
+
+      - name: Fail on a failed smoke test
+        if: ${{ !cancelled() && steps.check.outputs.passed != 'true' }}
+        run: |
+          echo "::error title=smoke test failed::$ADDRESS did not answer 200."
+          exit 1
