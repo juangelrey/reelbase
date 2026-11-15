@@ -1,5 +1,6 @@
 import "server-only";
 import { init, type LDClient, type LDContext } from "@launchdarkly/node-server-sdk";
+import { cache } from "react";
 
 /** Reelbase has no accounts, so every visitor is one context: a flag is on or off for everyone. */
 const VISITOR: LDContext = { kind: "user", key: "visitor", anonymous: true };
@@ -34,8 +35,9 @@ export async function isMarqueeHome(): Promise<boolean> {
 /**
  * A kill switch: whether the feature behind flag `key` is on. On unless the flag serves `false`, so a missing
  * flag, no SDK key or an unreachable LaunchDarkly leaves the feature on. Server code only.
+ * Cached per server request, so the layout and the page see one value even while the flag is being flipped.
  */
-export async function isFlagOn(key: string): Promise<boolean> {
+export const isFlagOn = cache(async (key: string): Promise<boolean> => {
   const ld = await client();
   return ld ? ld.boolVariation(key, VISITOR, true) : true;
-}
+});

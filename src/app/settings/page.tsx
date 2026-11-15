@@ -9,10 +9,11 @@ import { REGION_COOKIE, listRegions, resolveRegion } from "@/lib/catalog/regions
 import { SERVICES_COOKIE, parseSavedServices } from "@/lib/catalog/saved-services";
 import { isFlagOn } from "@/lib/flags/flags";
 
-// Per request, never at build time: a static page would keep the flag's build-time value until the next deploy.
-export const dynamic = "force-dynamic";
-
-/** The page exists only while flag `settings-page` is on; otherwise /settings is a 404. */
+/**
+ * The page exists only while flag `settings-page` is on; otherwise /settings is a 404. It renders per request, since
+ * `connection()` in the root layout makes every route dynamic. No `loading.tsx` may sit above it (home's is in the
+ * `(browse)` group): a Suspense boundary would send the 200 shell before `notFound()` runs.
+ */
 async function requireSettingsPage() {
   if (!(await isFlagOn("settings-page"))) notFound();
 }

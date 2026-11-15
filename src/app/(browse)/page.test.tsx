@@ -565,15 +565,16 @@ describe("Home page region", () => {
   it("is read only by the home and Settings pages, so other pages keep their caching", () => {
     // Vitest runs from the project root.
     const appDir = join(process.cwd(), "src/app");
-    // Settings renders per request anyway (`force-dynamic`), so reading the request there costs no caching.
+    // Settings renders per request anyway, so reading the request there costs no caching.
+    const home = join("(browse)", "page.tsx");
     const settings = join("settings", "page.tsx");
     const others = (readdirSync(appDir, { recursive: true }) as string[]).filter(
-      (file) => /(^|[\\/])(page|layout|template)\.tsx?$/.test(file) && file !== "page.tsx" && file !== settings,
+      (file) => /(^|[\\/])(page|layout|template)\.tsx?$/.test(file) && file !== home && file !== settings,
     );
     expect(others.length).toBeGreaterThan(0);
     const readers = others.filter((file) => /next\/headers|reelbase-region|REGION_COOKIE/.test(readFileSync(join(appDir, file), "utf8")));
     expect(readers).toEqual([]);
-    expect(readFileSync(join(appDir, "page.tsx"), "utf8")).toContain("next/headers");
+    expect(readFileSync(join(appDir, home), "utf8")).toContain("next/headers");
   });
 });
 

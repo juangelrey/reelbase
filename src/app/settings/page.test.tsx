@@ -1,10 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { notFound } from "next/navigation";
 import watchProviderRegions from "@/lib/tmdb/fixtures/watch-provider-regions.json";
 import watchProvidersMovie from "@/lib/tmdb/fixtures/watch-providers-movie.json";
 import watchProvidersTv from "@/lib/tmdb/fixtures/watch-providers-tv.json";
 import { THEME_STORAGE_KEY } from "@/lib/theme/theme";
-import SettingsPage, { dynamic, generateMetadata } from "./page";
+import SettingsPage, { generateMetadata } from "./page";
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -101,8 +103,14 @@ describe("Settings page", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("renders per request, so turning the flag off takes effect without a rebuild", () => {
-    expect(dynamic).toBe("force-dynamic");
+  it("has no loading boundary above it, so the flag-off 404 is sent with status 404", () => {
+    // A `loading.tsx` wraps its segment in Suspense: the 200 shell would be sent before `notFound()` runs.
+    // Vitest runs from the project root.
+    const appDir = join(process.cwd(), "src/app");
+    expect(existsSync(join(appDir, "loading.tsx"))).toBe(false);
+    expect(existsSync(join(appDir, "settings", "loading.tsx"))).toBe(false);
+    // Home's skeleton still applies, from its route group, to home and the watchlist.
+    expect(existsSync(join(appDir, "(browse)", "loading.tsx"))).toBe(true);
   });
 });
 

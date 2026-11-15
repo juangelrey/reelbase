@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import RootLayout from "./layout";
-import HomeLoading from "./loading";
+import HomeLoading from "./(browse)/loading";
 import PersonLoading from "./person/[id]/loading";
 import SearchLoading from "./search/loading";
 import TitleLoading from "./title/[id]/loading";
