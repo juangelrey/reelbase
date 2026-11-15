@@ -34,7 +34,7 @@ function discoverUrl(fetchMock: ReturnType<typeof stubTmdb>, kind = "movie") {
   return new URL(String(call![0]));
 }
 
-async function renderHome(params: Record<string, string> = {}) {
+async function renderHome(params: Record<string, string | string[]> = {}) {
   render(await Home({ searchParams: Promise.resolve(params) }));
 }
 
@@ -362,6 +362,44 @@ describe("Home page runtime", () => {
     expect(discoverUrl(withBad).search).toBe(expected);
     const runtimes = screen.getByRole("navigation", { name: "Runtime" });
     expect(within(runtimes).getByRole("link", { name: "Any" })).toHaveAttribute("aria-current", "true");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&sort=release&page=2");
+  });
+});
+
+describe("Home page language", () => {
+  it("sends the language to discover and keeps it in every link", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ language: "es", genre: "28", decade: "2010", rating: "7", runtime: "120", sort: "release" });
+    const params = discoverUrl(fetchMock).searchParams;
+    expect(params.get("with_original_language")).toBe("es");
+    expect(params.get("language")).toBe("en-US");
+    const languages = screen.getByRole("navigation", { name: "Language" });
+    expect(within(languages).getByRole("link", { name: "Spanish" })).toHaveAttribute("aria-current", "true");
+    const sort = screen.getByRole("navigation", { name: "Sort" });
+    expect(within(sort).getByRole("link", { name: "Popular" })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120&language=es");
+    const media = screen.getByRole("navigation", { name: "Movies or TV" });
+    expect(within(media).getByRole("link", { name: "TV" })).toHaveAttribute("href", "/?type=tv&decade=2010&rating=7&runtime=120&language=es&sort=release");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120&language=es&sort=release&page=2");
+  });
+
+  it("sends the language for TV too", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ type: "tv", language: "ko" });
+    expect(discoverUrl(fetchMock, "tv").searchParams.get("with_original_language")).toBe("ko");
+  });
+
+  it.each<string | string[]>(["EN", "de", "en-US", "english", "", ["de", "es"]])("reads ?language=%j as Any: the same request and links as without it", async (language) => {
+    const without = stubTmdb();
+    await renderHome({ genre: "28", sort: "release" });
+    const expected = discoverUrl(without).search;
+    cleanup();
+    const withBad = stubTmdb();
+    await renderHome({ genre: "28", sort: "release", language });
+    expect(discoverUrl(withBad).search).toBe(expected);
+    const languages = screen.getByRole("navigation", { name: "Language" });
+    expect(within(languages).getByRole("link", { name: "Any" })).toHaveAttribute("aria-current", "true");
     const pagination = screen.getByRole("navigation", { name: "Pagination" });
     expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&sort=release&page=2");
   });

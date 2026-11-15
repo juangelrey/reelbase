@@ -162,7 +162,15 @@ function runtimeParams({ runtime }: BrowseState): TmdbParams {
   return { "with_runtime.gte": 1, "with_runtime.lte": runtime - 1 };
 }
 
-/** A page of movies by genre, service, decade, rating, runtime and sort. */
+/**
+ * Discover params for an original language. It sets no vote floor, so each sort's stays as it is, and leaves the
+ * `language` param (the language TMDB text comes back in) alone. None for Any.
+ */
+function languageParams({ language }: BrowseState): TmdbParams {
+  return language === undefined ? {} : { with_original_language: language };
+}
+
+/** A page of movies by genre, service, decade, rating, runtime, original language and sort. */
 export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbMovieListItem>>("/discover/movie", {
@@ -174,11 +182,12 @@ export async function discoverTitles(state: BrowseState): Promise<Paged<TitleSum
     ...releaseDateParams(state, "movie"),
     ...ratingParams(state, "movie"),
     ...runtimeParams(state),
+    ...languageParams(state),
   });
   return toPaged(response, toSummary);
 }
 
-/** A page of TV series by TV genre, service, decade, rating, runtime and sort. */
+/** A page of TV series by TV genre, service, decade, rating, runtime, original language and sort. */
 export async function discoverShows(state: BrowseState): Promise<Paged<ShowSummary>> {
   const { genres, sort, page } = state;
   const response = await tmdbFetch<TmdbPaged<TmdbTvListItem>>("/discover/tv", {
@@ -190,6 +199,7 @@ export async function discoverShows(state: BrowseState): Promise<Paged<ShowSumma
     ...releaseDateParams(state, "tv"),
     ...ratingParams(state, "tv"),
     ...runtimeParams(state),
+    ...languageParams(state),
   });
   return toPaged(response, toShowSummary);
 }
