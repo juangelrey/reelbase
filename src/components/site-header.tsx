@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SearchBox } from "./search-box";
 import { ThemeToggle } from "./theme-toggle";
+import { WatchlistNavLink } from "./watchlist-nav-link";
 
 export function SiteHeader() {
   return (
@@ -14,9 +15,7 @@ export function SiteHeader() {
         <nav aria-label="Main" className="ml-auto">
           <ul className="flex items-center gap-4 text-sm">
             <li>
-              <Link href="/watchlist" className="text-zinc-300 hover:text-strong">
-                Watchlist
-              </Link>
+              <WatchlistNavLink />
             </li>
           </ul>
         </nav>
