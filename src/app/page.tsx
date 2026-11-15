@@ -21,6 +21,7 @@ import {
 import { listProviders } from "@/lib/catalog/providers";
 import { discoverShows, discoverTitles, listGenres } from "@/lib/catalog/queries";
 import { REGION_COOKIE, listRegions, resolveRegion } from "@/lib/catalog/regions";
+import { SERVICES_COOKIE, parseSavedServices } from "@/lib/catalog/saved-services";
 import { isFlagOn, isMarqueeHome } from "@/lib/flags/flags";
 
 /** TMDB's discover page size, which gives each result its place in the whole sorted list. */
@@ -91,11 +92,14 @@ export default async function Home({ searchParams }: HomeProps) {
   // The region's top 12 services for this kind; selected ids it doesn't list (carried over from another
   // kind or region) are dropped here, so changing kind or region needs no extra TMDB call. Four in all.
   const providers = await listProviders(kind, region);
+  // With flag `settings-page` off, the saved-services cookie is ignored and home browses as before.
+  const savedServices = settingsPage ? parseSavedServices(cookieStore.get(SERVICES_COOKIE)?.value) : [];
   const state = parseBrowseParams(
     params,
     new Set(genres.map(({ id }) => id)),
     region,
     new Set(providers.map(({ id }) => id)),
+    savedServices,
   );
   const { results, page, totalPages } = state.kind === "tv" ? await discoverShows(state) : await discoverTitles(state);
   // A page past the last one (a stale or edited link) falls back to page 1.

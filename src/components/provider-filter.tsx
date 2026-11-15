@@ -27,6 +27,7 @@ export function ProviderLogo({ provider }: { provider: Provider }) {
 
 /**
  * Service pills toggle a service in the selection, and "Any service" clears it; a title must stream on at least one.
+ * While saved services exist, no service links to `providers=any` (via `browseHref`), so they do not re-apply.
  * Any change starts again from page 1 and keeps the kind, genres, sort and an explicit region. TMDB's terms require
  * crediting JustWatch for provider data, so the credit is part of the filter and shown wherever it is.
  * A region that lists no services renders nothing.
