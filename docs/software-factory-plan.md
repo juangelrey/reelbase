@@ -5,13 +5,14 @@ and the change reaches production with no further action from you.
 
 ## Goal and limit
 
-**Goal:** approving a PRD is your only action. Build, verify, ship and repair run without you.
+**Goal:** approving a PRD is your only action. Build, verify and ship run without you.
 
 **What stays with you, on purpose:**
 
 - writing the PRD and approving it with the `approved` label
 - merging one-way-door PRs (auth, secrets, dependencies, CI, `.claude/`, removed routes)
 - answering tickets parked with `needs-human`
+- acting on a `bug` issue opened for a broken production deploy
 
 A parked ticket keeps its PRD open, and only one PRD can be open. So a parked ticket holds the next
 PRD until you answer it.
@@ -20,51 +21,22 @@ PRD until you answer it.
 
 | Step | State |
 |---|---|
-| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121) |
-| CI, `test-integrity`, door script, E2E on the preview | Run on every PR. Only CI is required |
-| The merge | By hand. An agent cannot merge: Claude's auto mode blocks it (#121). Phase 2 |
+| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121, #135) |
+| The merge | Done. A green two-way PR merges itself (#135) |
+| Closing the PRD's issues after the merge | By hand. Phase 3 |
+| Watching production | Nothing does. Phase 3 |
 | Starting a run | By hand, with **Run now**. Phase 4 |
-| After the merge | Nothing watches production. Phase 3 |
 
-## How the merge works
+## Path to the goal
 
-GitHub merges, not an agent. This is GitHub's own auto-merge, the same mechanism Dependabot PRs use:
+One step at a time, in this order.
 
-1. `main` has required checks. They are the gates.
-2. A small workflow turns on auto-merge for each factory PR when it opens.
-3. GitHub merges the PR when every required check is green. A red check means it never merges.
-
-A one-way PR fails the `door` check, so it waits for you. No agent holds the merge button, so
-Claude's permission system is not involved.
-
-**The gates are not protected from the PR they judge. Accepted for now (2026-11-15).** The checks
-run from the PR's own copy of the workflow files, so a PR could edit a workflow to make itself
-pass. The code owner rule does not stop it: GitHub counts the rule as passed when the PR's author
-is the code owner, and runs open PRs as you (#123 merged itself). What stands in the way is the
-`door` check, which calls such a PR one-way, and the run's own rule never to edit CI or skills. The
-fix, when wanted, is under [Later](#later).
-
-**An edited workflow also runs before any gate applies.** A `claude/` branch that edits a workflow
-runs its own copy before any gate applies, with every repository secret. With only `GITHUB_TOKEN`
-that copy can do no harm: the token is not a code owner and cannot bypass. So one rule holds in
-every phase: **a secret that can merge or deploy is stored in a GitHub Environment limited to
-`main`, never as a repository secret.** A job on a `claude/` branch cannot read it.
-
-A merge made by auto-merge starts no workflow on `main`. Nothing in this plan depends on one.
-
-## Phases
-
-One phase at a time, in this order. A phase starts when the one before it is done.
-
-| Phase | Goal | Removes this action of yours |
+| Step | Work | Who |
 |---|---|---|
-| 2 | Merge: a green two-way PR merges itself | The merge click |
-| 3 | Watch: a broken production deploy is undone | Noticing and rolling back |
-| 4 | Start: the `approved` label starts the run | **Run now** |
+| Phase 3 | One workflow file, no secrets | One PRD, one-way, you merge |
+| Settings | Require `test-integrity` and `e2e-preview` | You, two minutes |
+| Phase 4 | The trigger | You |
 | | **Goal reached** | |
-
-Watch comes before Start: once the label starts runs, nobody is looking at production. Phases 5 to
-9 are under [After the goal](#after-the-goal).
 
 **Rules for every phase**
 
@@ -73,137 +45,87 @@ Watch comes before Start: once the label starts runs, nobody is looking at produ
   PRD is written.
 - A phase is done only when its "Done when" is observed, not when its code is merged.
 - A phase that changes `.claude/` or CI is one-way: one PRD, built with `/as-build auto` in a
-  session you are in, and you merge it. What holds it for you is the required `door` check, not
-  the code owner rule, which passes for its author (#123). Gate protection, under [Later](#later),
-  is the stronger fix.
+  session you are in, and you merge it. The required `door` check holds it for you.
 - A PRD for a factory phase copies that phase's Scope list as its Behaviour, word for word.
 
-### Phase 2: merge
+## How the merge works
 
-**Goal:** a two-way PR opened by a `dark` run merges itself when its checks are green.
+GitHub merges, not an agent:
 
-**First, before any PRD. Done on 2026-11-15:** PR A (#122) and PR C (#124) merged themselves and
-deployed. The ruleset is live with the "For pull requests only" bypass. PR B (#123) failed: it
-merged itself. You accepted that gap; see [How the merge works](#how-the-merge-works). The steps
-as they were run:
+1. `main` has a ruleset (27289358) with required checks. They are the gates. Today:
+   `Lint, typecheck, test and build` and `door`.
+2. `automerge.yml` turns on auto-merge for each PR from a `claude/` branch when it opens.
+3. GitHub merges the PR when every required check is green.
 
-1. Settings → General → turn on **Allow auto-merge**.
-2. PR A adds `.github/CODEOWNERS` with three lines: `/.github/ @juangelrey`,
-   `/.claude/ @juangelrey`, `/scripts/ @juangelrey`. Click **Enable auto-merge**. Pass: GitHub merges it when the required check is green, and
-   Vercel deploys `main` to production.
-3. Settings → Rules → Rulesets: create a ruleset for `main`, then delete the old branch protection
-   rule, so one mechanism is left.
-   - Require a pull request before merging: 0 approvals, "Require review from Code Owners" on.
-   - Require status checks: `Lint, typecheck, test and build`, with **GitHub Actions** as its
-     source.
-   - Bypass list: Repository admin, set to **For pull requests only**. You can then merge any PR,
-     and nobody can push to `main` directly. If that mode is not offered on this repository, use
-     "Always allow"; the direct push then stays open, see
-     [safety](#what-dark-means-for-safety).
-4. PR B changes a comment in `.github/workflows/ci.yml`. Click **Enable auto-merge**. Wait until
-   its checks are green. Pass: 10 minutes after green it is still open, waiting for a code owner
-   review. Merge it with the bypass option.
-5. PR C changes a comment under `src/`. Click **Enable auto-merge**. Pass: it merges itself.
+A one-way PR fails `door`, so it waits for you. To merge it: **Disable auto-merge**, then merge with
+the bypass option.
 
-**Scope, your settings:**
+**Two limits, both accepted on 2026-11-15:**
 
-1. The ruleset's required checks become: `Lint, typecheck, test and build`, `test-integrity`,
-   `door`, `e2e-preview`. Each has **GitHub Actions** as its source, so a status with the same name
-   posted through the API by anyone else does not count. Done before the Phase 2 PRD's PR opens.
-   Until `door` is required, nothing holds that PR: the code owner rule passes for its author
-   (#123), and its own `automerge.yml` turns on auto-merge.
-2. The settings from the test stay on. You merge a one-way PR with the bypass option. It is also
-   your way out when a required check never reports.
+- The gates are not protected from the PR they judge. The checks run from the PR's own copy of the
+  workflow files, and the code owner rule passes for the PR's author (#123). What stands in the way
+  is `door`, which calls such a PR one-way, and the run's rule never to edit CI or skills.
+- A merge made by `GITHUB_TOKEN` does not close the issues its PR names. Phase 3 closes them.
 
-**Scope, one PRD, one ticket, four files:**
+**One rule for secrets:** a secret that can merge or deploy is stored in a GitHub Environment
+limited to `main`, never as a repository secret. A `claude/` branch that edits a workflow runs its
+own copy with every repository secret. No phase on the path to the goal adds a secret.
 
-1. `.github/workflows/ci.yml`, `door` job: it fails when the verdict is one-way.
-2. `.github/workflows/automerge.yml`, new: on `pull_request` opened, reopened or ready for review,
-   when the head branch is in this repository and starts with `claude/`, it runs
-   `gh pr merge --auto --merge` with `permissions: contents: write, pull-requests: write`. The job
-   fails if the command fails.
-3. `.claude/skills/as-build/autonomous.md`, `dark` mode: step 8 ends the run after it opens the
-   PR and comments on the PRD. It no longer waits for checks or spawns the `merger`. Its first
-   sentence stays: choosing `dark` is the user's sign-off to deploy two-way-door PRs to production
-   without their manual check. Step 9's summary no longer reports a merge verdict.
-4. `.claude/skills/as-build/SKILL.md`, the description and the Modes table: no line says the user
-   or the `merger` merges the PR. They say instead that a PR from a `claude/` branch merges itself
-   when its required checks are green, so a one-way PR waits for the user, and a PR from any other
-   branch is merged by the user.
+### Phase 2: merge. Done
 
-The workflow acts on every `claude/` PR, so a two-way PR from `/as-build auto` also merges itself.
-Accepted: it is outside the goal.
-
-**Not in this phase:** any other change to a skill, an agent, CI or settings. `/as-merge` stays for
-use by hand.
-
-**Test:** two steps.
-
-1. The Phase 2 PRD's own PR is the first time the workflow's token turns on auto-merge. It must stay
-   open, held by a red `door`. The run checks that the ruleset requires `door` before it opens the
-   PR, and stops if not. If `door` is green on that PR, the run turns auto-merge off and stops: the
-   change meant to hold it is wrong.
-2. The next product PRD, started with **Run now**, is the first merge made by `github-actions`.
-
-**Done when:** that PR merges itself and reaches production, and you did nothing after **Run now**.
-
-**If the workflow cannot turn on auto-merge** (a 403 from `GITHUB_TOKEN`): set Settings → Actions →
-Workflow permissions to read and write. If it still fails, use the token fallback below.
-
-**If Vercel does not deploy that merge:** use the token fallback, so the merge is made as you.
-
-**Token fallback.** A fine-grained token acts as you, with bypass, so a workflow edited on a
-`claude/` branch must never read it. Both of these, together:
-
-- The token is a secret of a GitHub Environment limited to `main`.
-- `automerge.yml` runs on `pull_request_target` and names that Environment. It then runs `main`'s
-  copy of the file, never the PR's. That is safe here because the job checks out no code: its only
-  step is `gh pr merge --auto --merge`.
+- Built and merged as #130 (PRD #126).
+- #135 was merged by `github-actions[bot]` 85 seconds after it opened and deployed to Production,
+  with no action after **Run now**.
+- Open defect: #135 left its issues #131 to #134 open. Until Phase 3 is done, you close a merged
+  PRD's issues by hand, because an open PRD holds the next one.
 
 ### Phase 3: watch
 
-**Goal:** a broken production deploy is undone without you, and production stays on the last good
-version until a fix passes.
+**Goal:** a healthy production deploy closes its PRD's issues, and a broken one is reported to you.
 
-**Verified limits of Vercel Hobby:**
+Nothing here needs a test first. Each fact it rests on is already observed; see
+[Facts](#facts-this-plan-rests-on).
 
-- A rollback goes only to the previous production deployment.
-- After a rollback, new pushes to `main` build but do not go live. `vercel promote <deployment>`
-  makes one live and restores normal behaviour.
+**Scope, one PRD, one ticket, one new file `.github/workflows/smoke.yml`:**
 
-**First, before any PRD:** prove three things by hand:
+1. It runs on `deployment_status`. A job condition lets through only state `success` with an
+   environment name that starts with `Production`.
+2. It requests the production address `https://reelbase-tau.vercel.app` and passes when the home
+   page answers 200. It retries once, after a wait, before it calls a failure.
+3. On a pass, it finds the pull request of the deployed commit and closes each issue that pull
+   request closes, with a comment naming the deployment.
+4. On a failure, it opens a `bug` issue naming the deployed commit, its pull request and its PRD.
+   It closes nothing.
+5. It can also be started by hand with an address to test, so the failure path can be proven
+   without breaking production. A run started by hand closes nothing.
+6. Its permissions are `contents: read`, `issues: write`, `pull-requests: read`. It uses no secret.
 
-- `vercel rollback` and `vercel promote` work on this project with `--token`.
-- After a rollback, a new `main` deployment that is not live still sends `deployment_status`.
-- A job started by `deployment_status` for a `main` deployment can use an Environment limited to
-  `main`, and the same job for a preview deployment is refused. Vercel may create deployments from
-  a commit with no branch, and the Environment rule matches on the branch.
+**What this leaves to you**, when a `bug` issue arrives:
 
-If the third fails: the `deployment_status` job holds no token. On a failed smoke test it starts a
-second workflow with `gh workflow run rollback.yml --ref main`; that one runs `main`'s copy and
-holds the token.
+- Click **Instant Rollback** in Vercel. Production is broken until you do.
+- Write and approve the PRD for the fix.
+- After a rollback, Vercel does not put new `main` deployments live. When the fix has merged,
+  promote its deployment in Vercel (**Manage** on the production tile).
+- While production is rolled back, the smoke test tests the old version and passes, so it closes
+  the fix's issues before the fix is live.
 
-**Scope:**
+Check once that GitHub emails you when an issue is opened: you must be watching the repository.
 
-1. A smoke test runs after each deployment to Vercel's Production environment, as a GitHub Action
-   on `deployment_status`. A job condition skips every preview deployment. It retries once before
-   it calls a failure.
-2. On failure it runs `vercel rollback` and opens a `bug` issue naming the merge and its PRD. The
-   Vercel token is a secret of a GitHub Environment limited to `main`: `deployment_status` also
-   fires for previews, and by the docs the job runs the deployed commit's copy of the workflow.
-3. While production is rolled back, the smoke test runs against each new `main` deployment's own
-   URL, with the same protection bypass secret `e2e-preview` uses. The first one that passes is
-   promoted with `vercel promote`.
+**Not in this phase:** rollback or promote by a workflow; any Vercel token; reverting the commit;
+feature flags; Sentry.
 
-**What this leaves to you:** the bad commit stays on `main`. Every later merge carries it and is
-not promoted, so production is frozen on the last good version until the `bug` issue is fixed. Until
-Phase 7, you turn that issue into a PRD.
+**Done when:** all three are observed.
 
-**Not in this phase:** reverting the commit; feature flags; Sentry; undoing changes to stored data.
+- The workflow, started by hand with an address that fails, opens a `bug` issue.
+- Its own merge deploys, and the PRD's issues close without you.
+- The next product PRD's issues close without you.
 
-**Done when:** a deliberately broken deploy is rolled back and reported as a `bug` issue, and the
-merge that fixes it goes live. Your only action in between is writing and approving the PRD for the
-fix.
+### Settings before Phase 4
+
+Add `test-integrity` and `e2e-preview` to the ruleset's required checks, each with **GitHub
+Actions** as its source. Until then a dark PR merges on lint, types, unit tests, build and `door`
+alone. E2E against the preview of the same build is the real protection before the merge, which is
+why the production smoke test can be thin.
 
 ### Phase 4: start
 
@@ -248,6 +170,7 @@ row.
 - A run that dies says nothing, and so does a PR with a red check. If a PRD has no run comment an
   hour after you approve it, open the task's History. If its PR is not merged 30 minutes after the
   run comment, open the PR.
+- GitHub events above the task's hourly cap are dropped without notice.
 - Every PRD carries these three sections:
 
 ```markdown
@@ -268,14 +191,15 @@ row.
 
 ## After the goal
 
-Not scheduled. Each becomes a phase by your decision, in this order, when its condition holds. Each
-gets its Scope list then, not before.
+Not scheduled. Each becomes a phase by your decision, when its condition holds. Each gets its Scope
+list then, not before.
 
 | Phase | Goal | Starts when |
 |---|---|---|
+| Cleanup | One one-way PR: the PRD's Rules section moves into the skills; `CODEOWNERS`, the code owner rule, the `merger` agent and `/as-merge` are deleted | Your decision |
 | 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | A red PR has cost you an action |
-| 6 | Auto-revert: a broken merge is reverted on `main` | Phase 3 shows how often production freezes |
-| 7 | Repair: a production error becomes a fix | Gate protection, under [Later](#later), is in place |
+| 6 | Auto-revert: a broken merge is reverted on `main`, so production heals without rollback and promote | `bug` issues from Phase 3 are frequent |
+| 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
 | 8 | Flags: each user-visible feature ships behind a flag, and an error spike turns it off | Your decision; it adds work to every product PRD |
 | 9 | Widen: the one-way list shrinks | Metrics from many runs |
 
@@ -283,46 +207,27 @@ gets its Scope list then, not before.
   while it waits.
 - Phase 6 needs the door script to call an exact revert two-way. Today it calls a revert one-way,
   because it deletes files and tests.
-- Phase 7 keeps your approval on every `bug` issue. Fixing without your approval changes the goal's
-  limit and is a separate decision.
-
-### Phase 7: repair
-
-**Goal:** a production error becomes a fix in the queue.
-
-**First, before any PRD:** prove that a cloud task can read Sentry issues through a claude.ai
-connector.
-
-**Scope:**
-
-1. `/as-build` builds a `bug` issue from a failing test, with no PRD.
-2. The Phase 4 trigger also starts a run when a `bug` issue gets the `approved` label. If Phase 4
-   uses the prompt lines, they say "`prd` or `bug` issue".
-3. An hourly cloud task turns new production errors in Sentry into deduplicated `bug` issues.
-
-**Rule added by this phase:** one run at a time. Approve a `bug` issue only when no PRD is open, and
-a PRD only when no approved `bug` issue is open.
-
-Sentry error text comes from a public site, so anyone can influence it. Your `approved` label is
-the filter: read the `bug` issue before you approve it.
-
-**Done when:** a production error becomes a `bug` issue, and after you label it `approved` its fix
-reaches production.
+- Phase 7 keeps your approval on every `bug` issue, and first needs proof that a cloud task can
+  read Sentry through a claude.ai connector.
+- If a workflow ever rolls back or promotes on Vercel, three findings from 2026-11-15 apply:
+  - Vercel sends `repository_dispatch` events (`vercel.deployment.success`, `.error`, `.promoted`)
+    that run only `main`'s copy of a workflow. Not yet observed in this repository.
+  - Vercel creates deployments by commit, so on `deployment_status` an Environment limited to
+    `main` will probably refuse the job.
+  - Environments named `Production` and `Preview` already exist, created by Vercel. A token's
+    Environment needs another name.
 
 ## Later
 
 Beyond the goal and outside the phases. Each needs your decision.
 
-- The `merger`'s verdict becomes a required commit status, so its reading of the diff is enforced
-  by GitHub. Any agent in the run could post that status, so it needs a source the builder cannot
-  use.
+- `door` passes only when the script's report has the exact line `**Door:** two-way`; today it
+  fails open when the line is missing or reworded.
+- `door` fails when the PR body says `**Door:** one-way`; today a builder can call its own PR
+  one-way and it still merges itself.
 - Gate protection: a PR that touches `.github/`, `.claude/` or `scripts/` cannot merge itself.
   Either the code owner is an account that runs do not act as, or a required check runs from
   `main`.
-- `/as-merge` becomes by-hand only: its description still says it runs as the `merger` agent from
-  `/as-build dark`, which is no longer true after Phase 2.
-- The scope rules move from the PRD into the skills: the review bar in `as-review`, the ticket cap
-  in `/as-plan`.
 - Agent verification: controls migrated to ui-sdk, a verifier that runs each PR's manual checks, and
   holdout scenarios.
 - Intake: an issue becomes a draft PRD.
@@ -330,16 +235,14 @@ Beyond the goal and outside the phases. Each needs your decision.
 
 ## What dark means for safety
 
-**Enforced by GitHub** on every merge: lint, types, unit tests, the build, `test-integrity`, the
-path rules of the door script, and E2E on the preview.
+**Enforced by GitHub** on every merge: lint, types, unit tests, the build and the path rules of the
+door script. `test-integrity` and E2E on the preview run on every PR but hold nothing until they
+are required, before Phase 4.
 
 **Done by the run, not enforced:** the two reviews before the PR opens.
 
-**One thing gets weaker in Phase 2.** With bypass allowed for you, GitHub no longer refuses a merge
-of a red PR made in your name. Runs act as you. What stops a run from doing it is Claude's auto
-mode, which refused exactly that on #121. A direct push to `main` stays refused by GitHub only if
-the bypass is set to "For pull requests only"; with "Always allow", auto mode is the only stop
-there too.
+**Bypass.** You can merge a red PR, and runs act as you. What stops a run from doing it is Claude's
+auto mode, which refused exactly that on #121. A direct push to `main` is refused by GitHub.
 
 **One exposure exists today.** `e2e-preview` runs on `deployment_status` with the preview bypass
 secret, so a workflow edited on a `claude/` branch can read it. That secret only opens preview
@@ -347,13 +250,12 @@ deployments, and previews need it, so it stays a repository secret.
 
 **Not done:**
 
-- The `merger`'s second reading of the diff. A one-way change inside an ordinary file, such as a
-  stored-data format, is not caught by path rules.
+- A second reading of the diff. A one-way change inside an ordinary file, such as a stored-data
+  format, is not caught by path rules.
 - A PR's manual checks.
 - Any check the builder cannot influence. The tests and E2E specs for a feature are written by the
   same run that builds it. Holdout scenarios, under [Later](#later), are the fix.
-- Any watch on production, until Phase 3. Until then, a bad deploy is undone by you with Vercel's
-  Instant Rollback.
+- Undoing a bad deploy. Phase 3 reports it; you roll back.
 
 ## Operating rules
 
@@ -363,6 +265,7 @@ deployments, and previews need it, so it stays a repository secret.
 - Work is finished before more is started. Nothing sits half-done while consuming tokens.
 - The advising session steers and does not write code.
 - The factory's plumbing must not block product work.
+- An open question is settled by the cheapest check, not by a factory run.
 
 **How they are applied**
 
@@ -390,45 +293,35 @@ End with a comment on the `prd` issue summarizing the run.
 
 ## Facts this plan rests on
 
+Only facts a remaining step depends on.
+
 | Fact | Source |
 |---|---|
-| Auto-merge merges a PR "after all required reviews and status checks pass"; it must be turned on for the repository | GitHub docs, automatically merging a pull request |
-| A workflow on `pull_request` can turn on auto-merge with `gh pr merge --auto --merge` and `GITHUB_TOKEN` | GitHub docs, automating Dependabot with GitHub Actions |
-| A required check that never reports stays pending and blocks the merge | GitHub docs, required status checks |
-| A pull request uses "the version of `CODEOWNERS` from the base branch" | GitHub docs, about code owners |
-| The code owner rule passes when the PR's author is the code owner | #123, ruleset log result `pass`, no review |
-| Auto-merge honours a ruleset; "For pull requests only" bypass works on this repository | #124, ruleset 27289358 |
-| Events caused by `GITHUB_TOKEN` start no new workflow run | GitHub docs, GITHUB_TOKEN |
-| Code owner review is required for "any pull request that affects code with a code owner" | GitHub docs, about protected branches |
-| A required check can name an app as its only accepted source | GitHub docs, about protected branches; available rules for rulesets |
-| Rulesets work on public repositories with GitHub Free; a bypass can be "For pull requests only" | GitHub docs, about rulesets; creating rulesets |
-| Environment secrets "are only available to workflow jobs that use the environment"; an Environment can be limited to chosen branches; free for public repositories | GitHub docs, managing environments |
-| `pull_request_target` "runs in the context of the default branch" | GitHub docs, events that trigger workflows |
-| On `deployment_status`, the run's commit is the "commit to be deployed", its branch "empty if commit" | GitHub docs, events that trigger workflows |
+| Vercel sends `deployment_status` with state `success` and environment `Production` for a `main` deployment, also after a merge by `github-actions[bot]`, and it starts a workflow run | Deployment 7802461820, run 43707174046 |
+| The deployed commit leads to its pull request, and the pull request to the issues it closes | `commits/9016e81/pulls` gives #135; `closingIssuesReferences` of #135 gives #131 to #134 |
+| The production address is public; a deployment's own address is behind Vercel's login | `reelbase-tau.vercel.app` answers 200; the deployment address answers 302 |
+| GitHub applies no closing keywords to a merge made by `GITHUB_TOKEN`; `issues: write` on the merging workflow does not change that | #135; reports in other repositories, not GitHub docs |
+| Events caused by `GITHUB_TOKEN` start no new workflow run, except `workflow_dispatch` and `repository_dispatch` | GitHub docs, events that trigger workflows |
+| On `deployment_status` the run uses the deployed commit's copy of the workflow | GitHub docs, events that trigger workflows; `e2e-preview` runs per branch |
+| The `bug` label exists | Label list, 2026-11-15 |
+| The code owner rule passes when the PR's author is the code owner | #123, ruleset log result `pass` |
+| Hobby rolls back one deployment only; after a rollback new pushes do not go live until one is promoted | Vercel docs, instant rollback |
 | A cloud run starts in auto mode, which blocks "merging a pull request no human has approved" | Claude Code docs, scheduled tasks and permission modes |
-| The cloud GitHub proxy rejects GraphQL, so a run cannot turn on auto-merge itself | Claude Code docs, cloud environments |
-| Issue events can trigger a task; label filters are documented for pull requests only | Claude Code docs, scheduled tasks |
+| Issue events can trigger a task; filters are documented for pull requests only; events above an hourly cap are dropped | Claude Code docs, scheduled tasks, read 2026-11-15 |
 | Cloud runs comment and label as you, through the Claude GitHub App | Issue events on #102, comments on #121 |
-| `e2e-preview` runs on `deployment_status` | 5 workflow runs since 2026-11-14 |
-| The `door` job reports its verdict as a comment and does not fail | `.github/workflows/ci.yml` |
-| Hobby rolls back one deployment only; after a rollback, `vercel promote` restores auto-deploy | Vercel docs, instant rollback |
-| Scheduled tasks can use claude.ai connectors and a committed `.mcp.json` | Claude Code docs, scheduled tasks |
 
 Not yet proven:
 
+- The issue trigger can be limited to the `approved` label (Phase 4, first step).
 - A run can see which event started it. The plan does not depend on it.
-- A `deployment_status` job for `main` passes an Environment limited to `main` (Phase 3, first
-  test).
-- `GITHUB_TOKEN` can turn on auto-merge here while the repository default is read-only (Phase 2,
-  test step 1).
-- Vercel deploys `main` after a merge made by `github-actions` (Phase 2, test step 2).
-- The issue trigger can be limited to the `approved` label (Phase 4).
-- A Sentry connector is available to a cloud task (Phase 7).
+- GitHub emails you when `github-actions` opens an issue (Phase 3, check once).
 
 ## Backlog
 
 Not in any phase. Nothing here is built unless you pull it into a PRD.
 
+- A one-way PR keeps auto-merge on, so a later green re-run of `door` would merge it.
+- `automerge.yml` may go red on a PR opened as a draft.
 - A parked ticket moves out of its PRD, so the PRD closes and the next one can start.
 - A second open PRD is refused instead of two runs sharing "the open `prd` issue".
 - A run that dies is reported without you looking.
