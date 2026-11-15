@@ -8,6 +8,7 @@ import { Pagination } from "@/components/pagination";
 import { ProviderFilter } from "@/components/provider-filter";
 import { RankedTitles } from "@/components/ranked-titles";
 import { RegionSelect } from "@/components/region-select";
+import { StreamingOn } from "@/components/streaming-on";
 import { TitleGrid } from "@/components/title-grid";
 import {
   browseHref,
@@ -74,13 +75,16 @@ export default async function Home({ searchParams }: HomeProps) {
   const [params, cookieStore, requestHeaders] = await Promise.all([searchParams, cookies(), headers()]);
   // Movie and TV genre ids differ, so the genre is checked against the list for the chosen kind.
   const kind = parseKind(params.type);
-  const [genres, regions, marquee, namesDecade, settingsPage] = await Promise.all([
+  const [genres, regions, marquee, namesDecade, settingsPage, servicesFlag] = await Promise.all([
     listGenres(kind),
     listRegions(),
     isMarqueeHome(),
     isFlagOn("decade-empty-hint"),
     isFlagOn("settings-page"),
+    isFlagOn("services-from-settings"),
   ]);
+  // Both flags on: home takes its services from Settings only, with no pills and no `providers` param.
+  const servicesFromSettings = settingsPage && servicesFlag;
   const region = resolveRegion(
     {
       param: firstParam(params.region),
@@ -100,6 +104,7 @@ export default async function Home({ searchParams }: HomeProps) {
     region,
     new Set(providers.map(({ id }) => id)),
     savedServices,
+    servicesFromSettings,
   );
   const { results, page, totalPages } = state.kind === "tv" ? await discoverShows(state) : await discoverTitles(state);
   // A page past the last one (a stale or edited link) falls back to page 1.
@@ -131,8 +136,13 @@ export default async function Home({ searchParams }: HomeProps) {
       {/* With flag `settings-page` on, the region is chosen on /settings; ?region= and the cookie still apply.
           Off, it shows here; changing region keeps the other filters and returns to page 1 (via /region). */}
       {!settingsPage && <RegionSelect regions={regions} state={state} />}
-      {/* The region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
-      <ProviderFilter providers={providers} state={state} />
+      {/* From Settings only, a line names the services that apply and links to /settings to change them. Otherwise
+          the region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
+      {servicesFromSettings ? (
+        <StreamingOn providers={providers} selected={state.providers} />
+      ) : (
+        <ProviderFilter providers={providers} state={state} />
+      )}
       {marquee && lead ? (
         <RankedTitles titles={rest} firstRank={(page - 1) * PAGE_SIZE + 2} />
       ) : (

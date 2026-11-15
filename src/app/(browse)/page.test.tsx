@@ -78,6 +78,11 @@ function settingsPageOff() {
   flags.killSwitches["settings-page"] = false;
 }
 
+/** Flag `services-from-settings` off: home shows the service pills and reads the `providers` param as before. */
+function servicesFromSettingsOff() {
+  flags.killSwitches["services-from-settings"] = false;
+}
+
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect ${url}`);
@@ -579,6 +584,9 @@ describe("Home page region", () => {
 });
 
 describe("Home page streaming services", () => {
+  // The service pills and the `providers` param; with the flag on, page-services-from-settings.test.tsx covers home.
+  beforeEach(servicesFromSettingsOff);
+
   function pathsCalled(fetchMock: ReturnType<typeof stubTmdb>) {
     return fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
   }
@@ -722,7 +730,7 @@ describe("Home page streaming services", () => {
     [{ language: "EN" }, "No titles to show right now."],
   ])("names the active filters when nothing matches %o", async (params, message) => {
     for (const decadeEmptyHint of [true, false]) {
-      flags.killSwitches = { "decade-empty-hint": decadeEmptyHint };
+      flags.killSwitches["decade-empty-hint"] = decadeEmptyHint;
       stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
       await renderHome(params);
       expect(screen.getByText(message)).toBeInTheDocument();
@@ -763,7 +771,7 @@ describe("Home page streaming services", () => {
       "No titles rated 7+ under 120 min in Spanish match this genre. Try removing one, or show all titles.",
     ],
   ])("leaves the decade out when nothing matches %o with decade-empty-hint off", async (params, message) => {
-    flags.killSwitches = { "decade-empty-hint": false };
+    flags.killSwitches["decade-empty-hint"] = false;
     stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
     await renderHome(params);
     expect(screen.getByText(message)).toBeInTheDocument();
@@ -776,6 +784,8 @@ describe("Home page streaming services", () => {
 });
 
 describe("Home page saved services", () => {
+  beforeEach(servicesFromSettingsOff);
+
   function services() {
     return screen.getByRole("navigation", { name: "Streaming service" });
   }
