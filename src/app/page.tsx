@@ -21,7 +21,7 @@ import {
 import { listProviders } from "@/lib/catalog/providers";
 import { discoverShows, discoverTitles, listGenres } from "@/lib/catalog/queries";
 import { REGION_COOKIE, listRegions, resolveRegion } from "@/lib/catalog/regions";
-import { isMarqueeHome } from "@/lib/flags/flags";
+import { isFlagOn, isMarqueeHome } from "@/lib/flags/flags";
 
 /** TMDB's discover page size, which gives each result its place in the whole sorted list. */
 const PAGE_SIZE = 20;
@@ -32,18 +32,26 @@ const BROWSE_KINDS = ["movie", "tv"] as const;
 /**
  * The empty-grid text, naming the genre, service, rating, runtime and language filters in play ("rated 7+",
  * "under 120 min", "in Spanish"). The hint suggests removing one when more than one of them is set, and trying
- * another when only one is.
+ * another when only one is. With `namesDecade` (flag `decade-empty-hint`), it also names the decade ("from the
+ * 1990s") straight after the noun and counts it as a filter; without it, the decade is left out as before.
  */
-function emptyMessage({ genres, providers, rating, runtime, language }: BrowseState, noun: string): string {
+function emptyMessage(
+  { genres, providers, decade, rating, runtime, language }: BrowseState,
+  noun: string,
+  namesDecade: boolean,
+): string {
+  const shownDecade = namesDecade ? decade : undefined;
   const genrePart = genres.length === 0 ? "" : genres.length === 1 ? "this genre" : "these genres";
   const servicePart = providers.length === 0 ? "" : providers.length === 1 ? "this service" : "these services";
+  const decadePart = shownDecade === undefined ? "" : ` from the ${shownDecade}s`;
   const ratingPart = rating === undefined ? "" : ` rated ${rating}+`;
   const runtimePart = runtime === undefined ? "" : ` under ${runtime} min`;
   const languagePart = language === undefined ? "" : ` in ${LANGUAGE_NAMES[language]}`;
-  const subject = `${noun}${ratingPart}${runtimePart}${languagePart}`;
+  const subject = `${noun}${decadePart}${ratingPart}${runtimePart}${languagePart}`;
   const filterCount =
     genres.length +
     providers.length +
+    (shownDecade === undefined ? 0 : 1) +
     (rating === undefined ? 0 : 1) +
     (runtime === undefined ? 0 : 1) +
     (language === undefined ? 0 : 1);
@@ -51,7 +59,7 @@ function emptyMessage({ genres, providers, rating, runtime, language }: BrowseSt
   if (genrePart && servicePart) return `No ${subject} match ${genrePart} on ${servicePart}. ${hint}`;
   if (servicePart) return `No ${subject} stream on ${servicePart}. ${hint}`;
   if (genrePart) return `No ${subject} match ${genrePart}. ${hint}`;
-  if (ratingPart || runtimePart || languagePart) return `No ${subject} to show. ${hint}`;
+  if (decadePart || ratingPart || runtimePart || languagePart) return `No ${subject} to show. ${hint}`;
   return `No ${noun} to show right now.`;
 }
 
@@ -65,7 +73,12 @@ export default async function Home({ searchParams }: HomeProps) {
   const [params, cookieStore, requestHeaders] = await Promise.all([searchParams, cookies(), headers()]);
   // Movie and TV genre ids differ, so the genre is checked against the list for the chosen kind.
   const kind = parseKind(params.type);
-  const [genres, regions, marquee] = await Promise.all([listGenres(kind), listRegions(), isMarqueeHome()]);
+  const [genres, regions, marquee, namesDecade] = await Promise.all([
+    listGenres(kind),
+    listRegions(),
+    isMarqueeHome(),
+    isFlagOn("decade-empty-hint"),
+  ]);
   const region = resolveRegion(
     {
       param: firstParam(params.region),
@@ -117,7 +130,7 @@ export default async function Home({ searchParams }: HomeProps) {
       {marquee && lead ? (
         <RankedTitles titles={rest} firstRank={(page - 1) * PAGE_SIZE + 2} />
       ) : (
-        <TitleGrid titles={titles} emptyMessage={emptyMessage(state, noun)} />
+        <TitleGrid titles={titles} emptyMessage={emptyMessage(state, noun, namesDecade)} />
       )}
       <Pagination page={page} totalPages={totalPages} hrefForPage={(n) => browseHref({ ...state, page: n })} />
     </div>
