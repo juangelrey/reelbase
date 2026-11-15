@@ -4,7 +4,8 @@ import { notFound, permanentRedirect } from "next/navigation";
 import details from "@/lib/tmdb/fixtures/movie-details.json";
 import sparse from "@/lib/tmdb/fixtures/movie-details-sparse.json";
 import { STORAGE_KEY } from "@/lib/watchlist/watchlist";
-import TitlePage, { dynamicParams, generateMetadata, generateStaticParams, revalidate } from "./page";
+import TitlePage, * as titlePage from "./page";
+import { generateMetadata } from "./page";
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -34,10 +35,10 @@ afterEach(() => {
 });
 
 describe("Title page", () => {
-  it("renders on demand and caches for an hour instead of prerendering movies", () => {
-    expect(generateStaticParams()).toEqual([]);
-    expect(dynamicParams).toBe(true);
-    expect(revalidate).toBe(3600);
+  it("sets no route caching of its own: the layout renders it per request, and TMDB responses stay cached", () => {
+    expect(titlePage).not.toHaveProperty("generateStaticParams");
+    expect(titlePage).not.toHaveProperty("dynamicParams");
+    expect(titlePage).not.toHaveProperty("revalidate");
   });
 
   it("renders a TMDB title at its canonical URL", async () => {

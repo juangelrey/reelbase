@@ -1,4 +1,5 @@
 import { MAX_PAGES } from "./map";
+import { isIdPart } from "./id-list";
 import type { TitleKind } from "./types";
 
 export type SearchParamValue = string | string[] | undefined;
@@ -38,6 +39,9 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   ko: "Korean",
 };
 
+/** Where a browse's services came from while saved services exist; see `BrowseState.providerSource`. */
+export type ProviderSource = "saved" | "url" | "any";
+
 export interface BrowseState {
   /** Movies or TV series; `type=tv` in the URL, movies when absent. */
   kind: TitleKind;
@@ -61,6 +65,13 @@ export interface BrowseState {
    * region carry them all, and the target page's parse drops any its own top 12 does not list.
    */
   providers: number[];
+  /**
+   * Where `providers` came from while the visitor has saved services (flag `settings-page`, cookie
+   * `reelbase-services`): `"saved"` when the URL has no `providers` param and the saved services the top 12 lists
+   * apply (possibly none), `"url"` when a `providers` param with ids won, and `"any"` for `providers=any`. Absent
+   * when nothing is saved, so URLs stay as they were before saved services. See `browseHref` for what each writes.
+   */
+  providerSource?: ProviderSource;
   /**
    * The decade titles are released in (first air date for TV), by its first year; absent for All.
    * `decade=2010` in the URL. Optional so a state without it reads as All.
@@ -108,7 +119,7 @@ export function parsePage(value: SearchParamValue): number {
 function parseIdList(value: SearchParamValue, knownIds: ReadonlySet<number>): number[] {
   const ids = (firstParam(value) ?? "")
     .split(",")
-    .filter((part) => /^[1-9]\d*$/.test(part))
+    .filter(isIdPart)
     .map(Number)
     .filter((id) => knownIds.has(id));
   return [...new Set(ids)].sort((a, b) => a - b);
@@ -158,19 +169,45 @@ function parseLanguage(value: SearchParamValue): Language | undefined {
 
 const NO_PROVIDERS: ReadonlySet<number> = new Set();
 
+/** The `providers` value for no service while saved services exist; never written without them. */
+const ANY_PROVIDER = "any";
+
+/**
+ * The services that apply and where they came from: `providers=any` gives none, a `providers` param with ids gives
+ * its listed ids (the URL wins), and otherwise the saved services the top 12 lists. The source is set only while
+ * saved services exist.
+ */
+function resolveProviders(
+  value: SearchParamValue,
+  listedProviderIds: ReadonlySet<number>,
+  savedServices: readonly number[],
+): Pick<BrowseState, "providers" | "providerSource"> {
+  const raw = firstParam(value) ?? "";
+  const [providers, source]: [number[], ProviderSource] =
+    raw === ANY_PROVIDER
+      ? [[], "any"]
+      : raw.split(",").some(isIdPart)
+        ? [parseProviders(raw, listedProviderIds), "url"]
+        : [savedServices.filter((id) => listedProviderIds.has(id)), "saved"];
+  // Set only while saved services exist, so a state with nothing saved is the same object as before saved services.
+  return savedServices.length > 0 ? { providers, providerSource: source } : { providers };
+}
+
 /**
  * The browse state from the URL. `knownGenreIds` is the genre list for the kind in `type` (read it with
  * `parseKind` first), so a genre id from the other kind's list is dropped. `region` is the region that
  * applies, from `resolveRegion` over the `region` param, the cookie and `Accept-Language`.
  * `listedProviderIds` is that region's top 12 for the kind, from `listProviders`; any other id in
  * `providers` is dropped, which is how services fall away after a kind or region change. Without it, no
- * service applies.
+ * service applies. `savedServices` are the visitor's saved provider ids, ascending (`parseSavedServices`), or
+ * none when flag `settings-page` is off; they apply only when the URL has no `providers` param with ids.
  */
 export function parseBrowseParams(
   params: Record<string, SearchParamValue>,
   knownGenreIds: ReadonlySet<number>,
   region: string,
   listedProviderIds: ReadonlySet<number> = NO_PROVIDERS,
+  savedServices: readonly number[] = [],
 ): BrowseState {
   const sort = firstParam(params.sort);
   return {
@@ -181,7 +218,7 @@ export function parseBrowseParams(
     region,
     // An unlisted `?region=` falls through to the cookie or language, so it does not count as from the URL.
     regionFromUrl: firstParam(params.region) === region,
-    providers: parseProviders(params.providers, listedProviderIds),
+    ...resolveProviders(params.providers, listedProviderIds, savedServices),
     decade: parseDecade(params.decade),
     rating: parseRating(params.rating),
     runtime: parseRuntime(params.runtime),
@@ -193,12 +230,21 @@ export function parseBrowseParams(
  * A home page URL. `type` is set only for TV, so movie links stay as they were before TV browse, `decade`,
  * `rating`, `runtime` and `language` only when one is set, and `region` only when it came from the URL. List separators stay
  * literal commas (`genre=28,35`, `providers=8,337`), not `%2C`, so links read as the spec writes them.
+ *
+ * `providers` follows `providerSource`. From the saved services (`"saved"`), it is left out, so the target page
+ * resolves the saved services for its own kind and region, even when none applied here. From the URL or Any
+ * service (`"url"`, `"any"`), it is the ids, or `providers=any` for none, so the saved services do not re-apply
+ * mid-browse. With nothing saved (no source), it is the ids, or left out for none, and `any` is never written.
+ * Links that pick services set the source with `withProviders`.
  */
-export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating, runtime, language }: BrowseState): string {
+export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, providerSource, decade, rating, runtime, language }: BrowseState): string {
   const query = new URLSearchParams();
   if (kind === "tv") query.set("type", "tv");
   if (genres.length > 0) query.set("genre", genres.join(","));
-  if (providers.length > 0) query.set("providers", providers.join(","));
+  if (providerSource !== "saved") {
+    if (providers.length > 0) query.set("providers", providers.join(","));
+    else if (providerSource !== undefined) query.set("providers", ANY_PROVIDER);
+  }
   if (decade !== undefined) query.set("decade", String(decade));
   if (rating !== undefined) query.set("rating", String(rating));
   if (runtime !== undefined) query.set("runtime", String(runtime));
@@ -208,6 +254,16 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   if (page > 1) query.set("page", String(page));
   const search = query.toString().replaceAll("%2C", ",");
   return search ? `/?${search}` : "/";
+}
+
+/**
+ * `state` with the visitor's own service choice `providers` (a pill, Any service, Clear filters): while saved
+ * services exist, its source becomes the URL's, or `"any"` for none, so `browseHref` writes the ids or
+ * `providers=any` rather than leaving the saved services to apply. With nothing saved, only the services change.
+ */
+export function withProviders(state: BrowseState, providers: number[]): BrowseState {
+  if (state.providerSource === undefined) return { ...state, providers };
+  return { ...state, providers, providerSource: providers.length > 0 ? "url" : "any" };
 }
 
 /**
@@ -230,5 +286,5 @@ export function hasFilters({ genres, providers, decade, rating, runtime, languag
  * `region` follow `browseHref`.
  */
 export function clearFiltersHref(state: BrowseState): string {
-  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, runtime: undefined, language: undefined, page: 1 });
+  return browseHref({ ...withProviders(state, []), genres: [], decade: undefined, rating: undefined, runtime: undefined, language: undefined, page: 1 });
 }

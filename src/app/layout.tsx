@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Anton } from "next/font/google";
+import { connection } from "next/server";
 import { ViewTransition, type ReactNode } from "react";
 import { SiteHeader } from "@/components/site-header";
+import { ThemeSync } from "@/components/theme-toggle";
 import { TmdbAttribution } from "@/components/tmdb-attribution";
+import { isFlagOn } from "@/lib/flags/flags";
 import { THEME_SCRIPT } from "@/lib/theme/theme";
 import "./globals.css";
 
@@ -14,7 +17,11 @@ export const metadata: Metadata = {
   description: "Browse, search and save real movies from TMDB.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Renders every route per request, so turning a flag off in LaunchDarkly takes effect without a rebuild.
+  // TMDB responses still come from the fetch cache (src/lib/tmdb/client.ts).
+  await connection();
+  const settingsPage = await isFlagOn("settings-page");
   return (
     // The inline script sets `data-theme` on <html> before first paint; React would otherwise flag that attribute.
     <html lang="en" className={anton.variable} suppressHydrationWarning>
@@ -23,7 +30,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="flex min-h-screen flex-col overflow-x-hidden bg-zinc-950 text-zinc-100 antialiased">
-        <SiteHeader />
+        {/* Applies the theme and follows the OS live on every page, wherever the theme toggle sits. */}
+        <ThemeSync />
+        <SiteHeader settingsPage={settingsPage} />
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
           {/*
             Every navigation and every loading-skeleton reveal is a transition, so the page content crossfades

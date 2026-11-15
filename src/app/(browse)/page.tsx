@@ -21,6 +21,7 @@ import {
 import { listProviders } from "@/lib/catalog/providers";
 import { discoverShows, discoverTitles, listGenres } from "@/lib/catalog/queries";
 import { REGION_COOKIE, listRegions, resolveRegion } from "@/lib/catalog/regions";
+import { SERVICES_COOKIE, parseSavedServices } from "@/lib/catalog/saved-services";
 import { isFlagOn, isMarqueeHome } from "@/lib/flags/flags";
 
 /** TMDB's discover page size, which gives each result its place in the whole sorted list. */
@@ -73,11 +74,12 @@ export default async function Home({ searchParams }: HomeProps) {
   const [params, cookieStore, requestHeaders] = await Promise.all([searchParams, cookies(), headers()]);
   // Movie and TV genre ids differ, so the genre is checked against the list for the chosen kind.
   const kind = parseKind(params.type);
-  const [genres, regions, marquee, namesDecade] = await Promise.all([
+  const [genres, regions, marquee, namesDecade, settingsPage] = await Promise.all([
     listGenres(kind),
     listRegions(),
     isMarqueeHome(),
     isFlagOn("decade-empty-hint"),
+    isFlagOn("settings-page"),
   ]);
   const region = resolveRegion(
     {
@@ -90,11 +92,14 @@ export default async function Home({ searchParams }: HomeProps) {
   // The region's top 12 services for this kind; selected ids it doesn't list (carried over from another
   // kind or region) are dropped here, so changing kind or region needs no extra TMDB call. Four in all.
   const providers = await listProviders(kind, region);
+  // With flag `settings-page` off, the saved-services cookie is ignored and home browses as before.
+  const savedServices = settingsPage ? parseSavedServices(cookieStore.get(SERVICES_COOKIE)?.value) : [];
   const state = parseBrowseParams(
     params,
     new Set(genres.map(({ id }) => id)),
     region,
     new Set(providers.map(({ id }) => id)),
+    savedServices,
   );
   const { results, page, totalPages } = state.kind === "tv" ? await discoverShows(state) : await discoverTitles(state);
   // A page past the last one (a stale or edited link) falls back to page 1.
@@ -123,8 +128,9 @@ export default async function Home({ searchParams }: HomeProps) {
       <BrowseControls genres={genres} state={state}>
         {marquee && mediaSwitch}
       </BrowseControls>
-      {/* Always shown; changing region keeps the other filters and returns to page 1 (via /region). */}
-      <RegionSelect regions={regions} state={state} />
+      {/* With flag `settings-page` on, the region is chosen on /settings; ?region= and the cookie still apply.
+          Off, it shows here; changing region keeps the other filters and returns to page 1 (via /region). */}
+      {!settingsPage && <RegionSelect regions={regions} state={state} />}
       {/* The region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
       <ProviderFilter providers={providers} state={state} />
       {marquee && lead ? (

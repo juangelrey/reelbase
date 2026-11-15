@@ -64,6 +64,14 @@ describe("RegionSelect", () => {
     expect(screen.getByRole("combobox", { name: "Region" })).toHaveValue("US");
   });
 
+  it("on Settings, shows the given region and sends only from=settings, so /region returns there", () => {
+    render(<RegionSelect regions={regions} region="ES" from="settings" />);
+    expect(form()).toHaveAttribute("action", "/region");
+    expect(screen.getByRole("combobox", { name: "Region" })).toHaveValue("ES");
+    expect(hiddenFields()).toEqual([["from", "settings"]]);
+    expect(within(form()).getByRole("button", { name: "Apply" })).toHaveAttribute("type", "submit");
+  });
+
   it("submits as soon as a region is chosen", async () => {
     const user = userEvent.setup();
     render(<RegionSelect regions={regions} state={state} />);

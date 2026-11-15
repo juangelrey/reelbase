@@ -12,6 +12,7 @@ import {
   parseKind,
   parsePage,
   toggleId,
+  withProviders,
 } from "./browse-params";
 
 const known = new Set([28, 878, 18]);
@@ -513,5 +514,99 @@ describe("toggleId", () => {
     toggleId(selected, 15);
     toggleId(selected, 8);
     expect(selected).toEqual([8, 337]);
+  });
+});
+
+describe("parseBrowseParams saved services", () => {
+  // Some of the US top 12 for movies: Netflix, Amazon Prime Video, Disney Plus, Hulu.
+  const listed = new Set([8, 9, 337, 15]);
+
+  it("applies the saved services the top 12 lists when the URL has no providers param", () => {
+    // 149 (Movistar Plus+) is saved from Spain and not in the US top 12.
+    expect(parseBrowseParams({}, known, "US", listed, [8, 149, 337])).toMatchObject({ providers: [8, 337], providerSource: "saved" });
+  });
+
+  it("applies no service when none of the saved services is in the top 12, still from the saved services", () => {
+    expect(parseBrowseParams({}, known, "US", listed, [149])).toMatchObject({ providers: [], providerSource: "saved" });
+  });
+
+  it("lets a providers param with ids win over the saved services", () => {
+    expect(parseBrowseParams({ providers: "9" }, known, "US", listed, [8, 337])).toMatchObject({ providers: [9], providerSource: "url" });
+    // Ids the top 12 does not list are still the URL's choice: no saved service applies.
+    expect(parseBrowseParams({ providers: "149" }, known, "US", listed, [8])).toMatchObject({ providers: [], providerSource: "url" });
+  });
+
+  it("applies no service with providers=any", () => {
+    expect(parseBrowseParams({ providers: "any" }, known, "US", listed, [8, 337])).toMatchObject({ providers: [], providerSource: "any" });
+  });
+
+  it("reads providers=any as no service, and sets no source, when nothing is saved", () => {
+    const state = parseBrowseParams({ providers: "any" }, known, "US", listed);
+    expect(state.providers).toEqual([]);
+    expect(state).not.toHaveProperty("providerSource");
+    expect(parseBrowseParams({}, known, "US", listed, [])).not.toHaveProperty("providerSource");
+    expect(parseBrowseParams({ providers: "8" }, known, "US", listed, [])).not.toHaveProperty("providerSource");
+  });
+});
+
+describe("browseHref saved services", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes providers=any for no service chosen by the visitor while saved services exist", () => {
+    expect(browseHref({ ...base, providerSource: "any" })).toBe("/?providers=any");
+    expect(browseHref({ ...base, providerSource: "any", kind: "tv", genres: [18], rating: 7, sort: "rating", page: 2 })).toBe(
+      "/?type=tv&genre=18&providers=any&rating=7&sort=rating&page=2",
+    );
+    // A providers param whose ids the top 12 does not list is still the URL's choice of none.
+    expect(browseHref({ ...base, providerSource: "url" })).toBe("/?providers=any");
+  });
+
+  it("writes the ids of an explicit selection while saved services exist", () => {
+    expect(browseHref({ ...base, providerSource: "url", providers: [8, 337] })).toBe("/?providers=8,337");
+  });
+
+  it("leaves providers out when the saved services applied, so the target page resolves them itself", () => {
+    expect(browseHref({ ...base, providerSource: "saved", providers: [8, 9] })).toBe("/");
+    expect(browseHref({ ...base, providerSource: "saved", providers: [8], kind: "tv", sort: "rating", page: 2 })).toBe("/?type=tv&sort=rating&page=2");
+    // None of the saved services in this kind's top 12 is not a choice of no service.
+    expect(browseHref({ ...base, providerSource: "saved", page: 2 })).toBe("/?page=2");
+  });
+
+  it("never writes providers=any without saved services", () => {
+    expect(browseHref(base)).toBe("/");
+    expect(browseHref({ ...base, providers: [8] })).toBe("/?providers=8");
+  });
+
+  it("clears filters to providers=any while saved services exist, whatever the source", () => {
+    for (const providerSource of ["saved", "url", "any"] as const)
+      expect(clearFiltersHref({ ...base, providerSource, providers: [8], genres: [28], decade: 2010 })).toBe("/?providers=any");
+    expect(clearFiltersHref({ ...base, providers: [8], genres: [28] })).toBe("/");
+  });
+
+  it("round-trips providers=any so the saved services do not re-apply", () => {
+    const state = { ...base, providerSource: "any" as const, genres: [28], sort: "title" as const, page: 2 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8, 337]), [8])).toEqual(state);
+  });
+
+  it("round-trips the saved services' state, which resolves the same services again", () => {
+    const state = { ...base, providerSource: "saved" as const, providers: [8], genres: [28], sort: "title" as const, page: 2 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8, 337]), [8])).toEqual(state);
+  });
+});
+
+describe("withProviders", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("makes a choice of services the URL's, and none Any service, while saved services exist", () => {
+    expect(withProviders({ ...base, providerSource: "saved", providers: [8, 9] }, [8])).toEqual({ ...base, providerSource: "url", providers: [8] });
+    expect(withProviders({ ...base, providerSource: "saved", providers: [8] }, [])).toEqual({ ...base, providerSource: "any", providers: [] });
+    expect(withProviders({ ...base, providerSource: "any" }, [337])).toEqual({ ...base, providerSource: "url", providers: [337] });
+  });
+
+  it("changes only the services when nothing is saved", () => {
+    expect(withProviders(base, [8])).toEqual({ ...base, providers: [8] });
+    expect(withProviders({ ...base, providers: [8] }, [])).toEqual(base);
   });
 });

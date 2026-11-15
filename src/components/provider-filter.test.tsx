@@ -76,6 +76,13 @@ describe("ProviderFilter", () => {
     expect(within(renderFilter({ providers: [8, 337] })!).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/");
   });
 
+  it("links Any service, and unselecting the last service, to providers=any while saved services exist", () => {
+    const nav = renderFilter({ providers: [8], providerSource: "saved" })!;
+    expect(within(nav).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?providers=any");
+    expect(within(nav).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?providers=any");
+    expect(within(nav).getByRole("link", { name: "Hulu" })).toHaveAttribute("href", "/?providers=8,15");
+  });
+
   it("returns to page 1 and keeps the kind, genres, sort and an explicit region", () => {
     const nav = renderFilter({ kind: "tv", genres: [18, 35], providers: [8], sort: "rating", page: 3, region: "ES", regionFromUrl: true })!;
     expect(within(nav).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?type=tv&genre=18,35&region=ES&sort=rating");

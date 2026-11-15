@@ -2,11 +2,11 @@
 
 import { browseHref, type BrowseState } from "@/lib/catalog/browse-params";
 
-interface RegionSelectProps {
+/** On home, `state` gives the region and the browse params to carry; on Settings, `from` sends the visitor back there. */
+type RegionSelectProps = {
   /** TMDB's watch-provider regions, A-Z by name, from `listRegions` (server-only, so passed in). */
   regions: { code: string; name: string }[];
-  state: BrowseState;
-}
+} & ({ state: BrowseState } | { region: string; from: "settings" });
 
 /**
  * The browse query to keep across a region change: every param `browseHref` writes for this state on page 1,
@@ -20,16 +20,19 @@ function carriedParams(state: BrowseState): [string, string][] {
 
 /**
  * A plain GET form to `/region`, which remembers the choice and returns home on page 1 with the carried
- * params. It works without JavaScript through the Apply button; with it, choosing a region submits at once.
+ * params, or to `/settings` when sent from there. It works without JavaScript through the Apply button; with
+ * it, choosing a region submits at once.
  */
-export function RegionSelect({ regions, state }: RegionSelectProps) {
+export function RegionSelect(props: RegionSelectProps) {
+  const { regions } = props;
+  const [region, hidden] = "state" in props ? [props.state.region, carriedParams(props.state)] : [props.region, [["from", props.from]]];
   return (
     <form action="/region" method="get" aria-label="Region" className="flex items-center gap-2 text-xs text-zinc-400">
       <label htmlFor="browse-region">Region</label>
       <select
         id="browse-region"
         name="region"
-        defaultValue={state.region}
+        defaultValue={region}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
         className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
       >
@@ -39,7 +42,7 @@ export function RegionSelect({ regions, state }: RegionSelectProps) {
           </option>
         ))}
       </select>
-      {carriedParams(state).map(([name, value]) => (
+      {hidden.map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       <button

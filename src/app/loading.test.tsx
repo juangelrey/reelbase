@@ -1,13 +1,15 @@
 import { render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import RootLayout from "./layout";
-import HomeLoading from "./loading";
+import HomeLoading from "./(browse)/loading";
 import PersonLoading from "./person/[id]/loading";
 import SearchLoading from "./search/loading";
 import TitleLoading from "./title/[id]/loading";
 import ShowLoading from "./tv/[id]/loading";
 
 vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header>header</header> }));
+// The layout waits for a request before reading flags; a test has none.
+vi.mock("next/server", () => ({ connection: async () => {} }));
 
 describe("loading skeletons", () => {
   it.each([
@@ -41,8 +43,9 @@ describe("loading skeletons", () => {
 });
 
 describe("RootLayout view transitions", () => {
-  it("names the footer so it stays still while main crossfades", () => {
-    const html = renderToStaticMarkup(<RootLayout>page</RootLayout>);
+  it("names the footer so it stays still while main crossfades", async () => {
+    // An async server component: awaited first, since the static renderer does not await.
+    const html = renderToStaticMarkup(await RootLayout({ children: "page" }));
     expect(html).toMatch(/<footer[^>]*style="view-transition-name:site-footer"/);
   });
 });

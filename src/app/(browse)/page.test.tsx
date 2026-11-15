@@ -45,20 +45,37 @@ function gridNames() {
     .map((item) => within(item).getByRole("heading").textContent);
 }
 
-/** What the visitor's request carries: the `reelbase-region` cookie and the `Accept-Language` header. */
-const request = vi.hoisted(() => ({ regionCookie: undefined as string | undefined, acceptLanguage: undefined as string | undefined }));
+/**
+ * What the visitor's request carries: the `reelbase-region` and `reelbase-services` cookies and the
+ * `Accept-Language` header.
+ */
+const request = vi.hoisted(() => ({
+  regionCookie: undefined as string | undefined,
+  servicesCookie: undefined as string | undefined,
+  acceptLanguage: undefined as string | undefined,
+  setCookie: vi.fn(),
+}));
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({
-    get: (name: string) =>
-      name === "reelbase-region" && request.regionCookie !== undefined ? { name, value: request.regionCookie } : undefined,
+    get: (name: string) => {
+      const value = name === "reelbase-region" ? request.regionCookie : name === "reelbase-services" ? request.servicesCookie : undefined;
+      return value === undefined ? undefined : { name, value };
+    },
+    set: request.setCookie,
   })),
   headers: vi.fn(async () => new Headers(request.acceptLanguage === undefined ? {} : { "accept-language": request.acceptLanguage })),
 }));
 
-/** The region the visible selector shows as applied. */
+/** The region home applied: the one its services were asked for, so it reads the same with the select shown or not. */
 function selectedRegion() {
-  return (screen.getByRole("combobox", { name: "Region" }) as HTMLSelectElement).value;
+  const call = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/watch/providers/movie") || String(input).includes("/watch/providers/tv"));
+  return new URL(String(call![0])).searchParams.get("watch_region");
+}
+
+/** Flag `settings-page` off: home shows the region select as it did before Settings. */
+function settingsPageOff() {
+  flags.killSwitches["settings-page"] = false;
 }
 
 vi.mock("next/navigation", () => ({
@@ -80,7 +97,9 @@ beforeEach(() => {
   flags.marqueeHome = true;
   flags.killSwitches = {};
   request.regionCookie = undefined;
+  request.servicesCookie = undefined;
   request.acceptLanguage = undefined;
+  request.setCookie.mockClear();
 });
 
 afterEach(() => {
@@ -306,6 +325,7 @@ describe("Home page decade", () => {
 
   it("keeps the decade in the sort, genre, Movies / TV, service, region and pagination links", async () => {
     stubTmdb();
+    settingsPageOff();
     await renderHome({ decade: "2010", genre: "28", sort: "rating" });
     const sort = screen.getByRole("navigation", { name: "Sort" });
     expect(within(sort).getByRole("link", { name: "Title" })).toHaveAttribute("href", "/?genre=28&decade=2010&sort=title");
@@ -509,8 +529,9 @@ describe("Home page region", () => {
   it.each([
     [{ genre: "28,35", sort: "rating", page: "2" }, [["genre", "28,35"], ["sort", "rating"]]],
     [{ type: "tv", genre: "18", region: "GB" }, [["type", "tv"], ["genre", "18"]]],
-  ])("shows the region selector on %o, carrying the browse params to /region", async (params, carried) => {
+  ])("with the settings-page flag off, shows the region selector on %o, carrying the browse params to /region", async (params, carried) => {
     stubTmdb();
+    settingsPageOff();
     await renderHome(params);
     const form = screen.getByRole("form", { name: "Region" });
     expect(form).toHaveAttribute("action", "/region");
@@ -522,16 +543,38 @@ describe("Home page region", () => {
     expect(within(form).getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 
-  it("is read only by the home page, so other pages keep their caching", () => {
+  it("with the settings-page flag on, shows no region selector and still applies ?region= over the cookie without saving it", async () => {
+    stubTmdb();
+    request.regionCookie = "GB";
+    await renderHome({ region: "ES", genre: "28" });
+    expect(screen.queryByRole("form", { name: "Region" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Region" })).not.toBeInTheDocument();
+    expect(selectedRegion()).toBe("ES");
+    expect(request.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("with the settings-page flag off, still applies ?region= over the cookie without saving it", async () => {
+    stubTmdb();
+    settingsPageOff();
+    request.regionCookie = "GB";
+    await renderHome({ region: "ES" });
+    expect((screen.getByRole("combobox", { name: "Region" }) as HTMLSelectElement).value).toBe("ES");
+    expect(request.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("is read only by the home and Settings pages, so other pages keep their caching", () => {
     // Vitest runs from the project root.
     const appDir = join(process.cwd(), "src/app");
+    // Settings renders per request anyway, so reading the request there costs no caching.
+    const home = join("(browse)", "page.tsx");
+    const settings = join("settings", "page.tsx");
     const others = (readdirSync(appDir, { recursive: true }) as string[]).filter(
-      (file) => /(^|[\\/])(page|layout|template)\.tsx?$/.test(file) && file !== "page.tsx",
+      (file) => /(^|[\\/])(page|layout|template)\.tsx?$/.test(file) && file !== home && file !== settings,
     );
     expect(others.length).toBeGreaterThan(0);
     const readers = others.filter((file) => /next\/headers|reelbase-region|REGION_COOKIE/.test(readFileSync(join(appDir, file), "utf8")));
     expect(readers).toEqual([]);
-    expect(readFileSync(join(appDir, "page.tsx"), "utf8")).toContain("next/headers");
+    expect(readFileSync(join(appDir, home), "utf8")).toContain("next/headers");
   });
 });
 
@@ -587,6 +630,7 @@ describe("Home page streaming services", () => {
 
   it("carries every selected service through the region form and the Movies / TV switch", async () => {
     stubTmdb();
+    settingsPageOff();
     await renderHome({ genre: "28", providers: "8,15", sort: "rating", page: "2" });
     const form = screen.getByRole("form", { name: "Region" });
     const hidden = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')).map(({ name, value }) => [name, value]);
@@ -728,5 +772,166 @@ describe("Home page streaming services", () => {
   it("sends a page past the last one back to page 1, keeping the services", async () => {
     stubTmdb({ page: 400, results: [], total_pages: 30, total_results: 600 });
     await expect(Home({ searchParams: Promise.resolve({ providers: "8", page: "400" }) })).rejects.toThrow("redirect /?providers=8");
+  });
+});
+
+describe("Home page saved services", () => {
+  function services() {
+    return screen.getByRole("navigation", { name: "Streaming service" });
+  }
+
+  function nextPageHref() {
+    return within(screen.getByRole("navigation", { name: "Pagination" })).getByRole("link", { name: /Next/ }).getAttribute("href");
+  }
+
+  it("filters by the saved services in the region's top 12 when the URL has no providers param, and selects their pills", async () => {
+    const fetchMock = stubTmdb();
+    // 149 (Movistar Plus+) is saved from Spain and not in the US top 12, so it stays out of the filter.
+    request.servicesCookie = "8,149,337";
+    await renderHome();
+    expect(discoverUrl(fetchMock).searchParams.get("with_watch_providers")).toBe("8|337");
+    expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("aria-current", "true");
+    expect(within(services()).getByRole("link", { name: "Disney Plus" })).toHaveAttribute("aria-current", "true");
+    expect(within(services()).getByRole("link", { name: "Hulu" })).not.toHaveAttribute("aria-current");
+    expect(within(services()).getByRole("link", { name: "Any service" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("links Any service and Clear filters to providers=any while saved services exist", async () => {
+    stubTmdb();
+    request.servicesCookie = "8";
+    await renderHome({ genre: "28" });
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?genre=28&providers=any");
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?providers=any");
+    // Unselecting the last saved service is no service, so the saved services do not re-apply either.
+    expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?genre=28&providers=any");
+  });
+
+  it("shows unfiltered results when none of the saved services is in the top 12, and leaves providers out of browse links", async () => {
+    const fetchMock = stubTmdb();
+    request.servicesCookie = "149";
+    await renderHome();
+    expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("aria-current", "true");
+    // Not a choice of no service: the next page resolves the saved services again, to the same results.
+    expect(nextPageHref()).toBe("/?page=2");
+    expect(within(screen.getByRole("navigation", { name: "Sort" })).getByRole("link", { name: "Top rated" })).toHaveAttribute("href", "/?sort=rating");
+    // Choosing Any service is that choice.
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?providers=any");
+  });
+
+  it("leaves providers out of paging and sort links while the saved services apply, and pills write ids", async () => {
+    stubTmdb();
+    request.servicesCookie = "8,337";
+    await renderHome({ genre: "28" });
+    expect(nextPageHref()).toBe("/?genre=28&page=2");
+    expect(within(screen.getByRole("navigation", { name: "Sort" })).getByRole("link", { name: "Top rated" })).toHaveAttribute(
+      "href",
+      "/?genre=28&sort=rating",
+    );
+    expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?genre=28&providers=337");
+    expect(within(services()).getByRole("link", { name: "Hulu" })).toHaveAttribute("href", "/?genre=28&providers=8,15,337");
+  });
+
+  describe("switching kind with a saved service only in the other kind's top 12", () => {
+    // Movies list Netflix and Amazon Prime Video; TV lists them and Crunchyroll (283).
+    const movieTop = { results: watchProvidersMovie.results.filter(({ provider_id }) => provider_id === 8 || provider_id === 9) };
+    const netflix = watchProvidersTv.results.find(({ provider_id }) => provider_id === 8)!;
+    const tvTop = {
+      results: [...movieTop.results, { ...netflix, provider_id: 283, provider_name: "Crunchyroll", display_priorities: { US: 2 } }],
+    };
+    const bodies = { "/3/watch/providers/movie": movieTop, "/3/watch/providers/tv": tvTop };
+
+    function kindLink(name: "Movies" | "TV") {
+      return within(screen.getByRole("navigation", { name: "Movies or TV" })).getByRole("link", { name });
+    }
+
+    it("links TV without providers when some saved services are listed for movies, and TV applies them all", async () => {
+      const fetchMock = stubTmdb(discover, bodies);
+      request.servicesCookie = "8,283";
+      await renderHome();
+      expect(discoverUrl(fetchMock).searchParams.get("with_watch_providers")).toBe("8");
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv");
+      cleanup();
+      fetchMock.mockClear();
+      await renderHome({ type: "tv" });
+      expect(discoverUrl(fetchMock, "tv").searchParams.get("with_watch_providers")).toBe("8|283");
+      expect(kindLink("Movies")).toHaveAttribute("href", "/");
+    });
+
+    it("links TV without providers when no saved service is listed for movies, and TV applies it", async () => {
+      const fetchMock = stubTmdb(discover, bodies);
+      request.servicesCookie = "283";
+      await renderHome();
+      expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv");
+      cleanup();
+      fetchMock.mockClear();
+      await renderHome({ type: "tv" });
+      expect(discoverUrl(fetchMock, "tv").searchParams.get("with_watch_providers")).toBe("283");
+      expect(kindLink("Movies")).toHaveAttribute("href", "/");
+    });
+
+    it("keeps an explicit selection or providers=any across the switch", async () => {
+      stubTmdb(discover, bodies);
+      request.servicesCookie = "283";
+      await renderHome({ providers: "8" });
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv&providers=8");
+      cleanup();
+      await renderHome({ providers: "any" });
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv&providers=any");
+    });
+  });
+
+  it("lets a providers param with ids win over the saved services", async () => {
+    const fetchMock = stubTmdb();
+    request.servicesCookie = "8,337";
+    await renderHome({ providers: "9" });
+    expect(discoverUrl(fetchMock).searchParams.get("with_watch_providers")).toBe("9");
+    expect(within(services()).getByRole("link", { name: "Amazon Prime Video" })).toHaveAttribute("aria-current", "true");
+    expect(within(services()).getByRole("link", { name: "Netflix" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("applies no service with providers=any, selects Any service and keeps providers=any in every browse link", async () => {
+    const fetchMock = stubTmdb();
+    request.servicesCookie = "8,337";
+    await renderHome({ providers: "any", genre: "28" });
+    expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("aria-current", "true");
+    expect(within(services()).getByRole("link", { name: "Netflix" })).not.toHaveAttribute("aria-current");
+    expect(nextPageHref()).toBe("/?genre=28&providers=any&page=2");
+    expect(within(screen.getByRole("navigation", { name: "Sort" })).getByRole("link", { name: "Top rated" })).toHaveAttribute(
+      "href",
+      "/?genre=28&providers=any&sort=rating",
+    );
+    expect(within(screen.getByRole("navigation", { name: "Genre" })).getByRole("link", { name: "All" })).toHaveAttribute("href", "/?providers=any");
+    expect(within(screen.getByRole("navigation", { name: "Rating" })).getByRole("link", { name: "7+" })).toHaveAttribute(
+      "href",
+      "/?genre=28&providers=any&rating=7",
+    );
+    expect(within(screen.getByRole("navigation", { name: "Movies or TV" })).getByRole("link", { name: "TV" })).toHaveAttribute(
+      "href",
+      "/?type=tv&providers=any",
+    );
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?providers=any");
+  });
+
+  it("never writes providers=any with no saved services", async () => {
+    stubTmdb();
+    request.servicesCookie = "abc";
+    await renderHome({ genre: "28" });
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?genre=28");
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/");
+    expect(nextPageHref()).toBe("/?genre=28&page=2");
+  });
+
+  it("ignores the saved services with the settings-page flag off", async () => {
+    const fetchMock = stubTmdb();
+    settingsPageOff();
+    request.servicesCookie = "8,337";
+    await renderHome();
+    expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("aria-current", "true");
+    expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?providers=8");
+    expect(nextPageHref()).toBe("/?page=2");
   });
 });

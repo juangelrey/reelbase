@@ -11,14 +11,6 @@ interface TitlePageProps {
   params: Promise<{ id: string }>;
 }
 
-// Rendered on first request and cached for an hour. No movie is prerendered at build time.
-export const revalidate = 3600;
-export const dynamicParams = true;
-
-export function generateStaticParams(): { id: string }[] {
-  return [];
-}
-
 async function findTitle(param: string) {
   const parsed = parseTitleParam(param);
   if (!parsed) return { title: undefined, canonical: false };
