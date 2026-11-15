@@ -1,6 +1,6 @@
 ---
 name: as-build
-description: 'Build tickets test-first and open a PR. No argument: next ticket. "auto": whole plan. "dark": whole plan in parallel. A claude/ PR merges itself when its required checks are green, so a one-way PR waits for you; any other PR is yours to merge.'
+description: 'Build tickets test-first and open a PR. No argument: next ticket. "auto": whole plan. "dark": whole plan in parallel. "repair": one production bug. A claude/ PR merges itself when its required checks are green, so a one-way PR waits for you; any other PR is yours to merge.'
 disable-model-invocation: true
 ---
 
@@ -11,10 +11,11 @@ disable-model-invocation: true
 | `/as-build` | the next ready ticket | nothing up front | one PR for that ticket |
 | `/as-build auto` | the whole plan, written first if none exists, each ticket in a fresh `implementer` agent | the plan once, plus any blocker or high-risk ticket | one PR for the plan |
 | `/as-build dark` | same as `auto`, but ready tickets run in parallel, each in its own worktree | the plan once; parked tickets wait for the user | the same PR, and the run ends once it is open |
+| `/as-build repair` | one `bug` issue labeled `repair`, with no `prd` and no plan, in a fresh `implementer` agent | nothing; a parked bug waits for the user | one PR for that bug, which stays open until the fix is live |
 
 A PR from a `claude/` branch merges itself when its required checks are green, so a one-way PR, which fails `door`, waits for the user. A PR from any other branch is merged by the user.
 
-`$ARGUMENTS` selects the mode: `auto` and `dark` follow `autonomous.md` in this folder, and empty or anything else runs Default.
+`$ARGUMENTS` selects the mode: `auto` and `dark` follow `autonomous.md` in this folder, `repair` follows `repair.md`, and empty or anything else runs Default.
 
 ## Default: one task
 
@@ -40,6 +41,8 @@ When the `prd` names a flag, everything it changes for a visitor sits behind `is
 Before opening the PR, create the flag through the LaunchDarkly connector, in project `reelbase`: a boolean with the PRD's key that serves `true` when on and `false` when off. Turn it on in every environment. Turning it off in LaunchDarkly is then what turns the feature off. In `auto` and `dark` the coordinator does this, not an implementer.
 
 A flag that is off hides the feature, and a missing flag leaves it on. So if you cannot turn the flag on in every environment, delete it and say so in the PR body.
+
+In `repair`, do not create a flag or change one's state: the failing PR's flag may be off in production, and it stays off until the fix is live.
 
 ## PR body
 
