@@ -36,15 +36,24 @@ const BROWSE_KINDS = ["movie", "tv"] as const;
  * "under 120 min", "in Spanish"). The hint suggests removing one when more than one of them is set, and trying
  * another when only one is. With `namesDecade` (flag `decade-empty-hint`), it also names the decade ("from the
  * 1990s") straight after the noun and counts it as a filter; without it, the decade is left out as before.
+ * When saved services apply from Settings (flags `services-from-settings` and `settings-page`), it speaks of
+ * "your services", and the hint counts only the other filters, since Settings, not home, changes the services.
  */
 function emptyMessage(
-  { genres, providers, decade, rating, runtime, language }: BrowseState,
+  { genres, providers, providerSource, decade, rating, runtime, language }: BrowseState,
   noun: string,
   namesDecade: boolean,
 ): string {
   const shownDecade = namesDecade ? decade : undefined;
   const genrePart = genres.length === 0 ? "" : genres.length === 1 ? "this genre" : "these genres";
-  const servicePart = providers.length === 0 ? "" : providers.length === 1 ? "this service" : "these services";
+  const fromSettings = providerSource === "settings" && providers.length > 0;
+  const servicePart = fromSettings
+    ? "your services"
+    : providers.length === 0
+      ? ""
+      : providers.length === 1
+        ? "this service"
+        : "these services";
   const decadePart = shownDecade === undefined ? "" : ` from the ${shownDecade}s`;
   const ratingPart = rating === undefined ? "" : ` rated ${rating}+`;
   const runtimePart = runtime === undefined ? "" : ` under ${runtime} min`;
@@ -52,14 +61,14 @@ function emptyMessage(
   const subject = `${noun}${decadePart}${ratingPart}${runtimePart}${languagePart}`;
   const filterCount =
     genres.length +
-    providers.length +
+    (fromSettings ? 0 : providers.length) +
     (shownDecade === undefined ? 0 : 1) +
     (rating === undefined ? 0 : 1) +
     (runtime === undefined ? 0 : 1) +
     (language === undefined ? 0 : 1);
   const hint = `${filterCount > 1 ? "Try removing one" : "Try another one"}, or show all ${noun}.`;
   if (genrePart && servicePart) return `No ${subject} match ${genrePart} on ${servicePart}. ${hint}`;
-  if (servicePart) return `No ${subject} stream on ${servicePart}. ${hint}`;
+  if (servicePart) return fromSettings && filterCount === 0 ? `No ${noun} stream on your services right now.` : `No ${subject} stream on ${servicePart}. ${hint}`;
   if (genrePart) return `No ${subject} match ${genrePart}. ${hint}`;
   if (decadePart || ratingPart || runtimePart || languagePart) return `No ${subject} to show. ${hint}`;
   return `No ${noun} to show right now.`;

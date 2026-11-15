@@ -182,6 +182,41 @@ describe("Home page with services from Settings", () => {
     expect(streamingOnLine()).toHaveTextContent("Streaming on: Movistar Plus+ Change");
   });
 
+  const emptyDiscover = { page: 1, results: [], total_pages: 0, total_results: 0 };
+
+  it.each([
+    [{}, "8", "No titles stream on your services right now."],
+    [{ type: "tv" }, "8,337", "No series stream on your services right now."],
+    [{ genre: "28" }, "8,337", "No titles match this genre on your services. Try another one, or show all titles."],
+    [{ genre: "28,35" }, "8", "No titles match these genres on your services. Try removing one, or show all titles."],
+    [{ rating: "7" }, "8", "No titles rated 7+ stream on your services. Try another one, or show all titles."],
+    [{ genre: "28", rating: "7" }, "8", "No titles rated 7+ match this genre on your services. Try removing one, or show all titles."],
+    [{ type: "tv", language: "es" }, "8", "No series in Spanish stream on your services. Try another one, or show all series."],
+  ])("names your services in the empty-grid text for %j with services %s saved", async (params, saved, message) => {
+    stubTmdb({ "/3/discover/movie": emptyDiscover, "/3/discover/tv": emptyDiscover });
+    request.servicesCookie = saved;
+    await renderHome(params);
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it.each([
+    [undefined, {}, "No titles to show right now."],
+    ["149", { genre: "28" }, "No titles match this genre. Try another one, or show all titles."],
+  ])("keeps today's empty-grid text when no saved service applies (cookie %s)", async (saved, params, message) => {
+    stubTmdb({ "/3/discover/movie": emptyDiscover });
+    request.servicesCookie = saved;
+    await renderHome(params);
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it.each(["services-from-settings", "settings-page"])("keeps today's empty-grid text with %s off", async (flag) => {
+    flags.killSwitches[flag] = false;
+    stubTmdb({ "/3/discover/movie": emptyDiscover });
+    request.servicesCookie = "8";
+    await renderHome({ genre: "28", providers: "8,337" });
+    expect(screen.getByText("No titles match this genre on these services. Try removing one, or show all titles.")).toBeInTheDocument();
+  });
+
   it.each(["services-from-settings", "settings-page"])("shows the pills, providers param and credit as before with %s off", async (flag) => {
     flags.killSwitches[flag] = false;
     const fetchMock = stubTmdb();
