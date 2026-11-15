@@ -198,7 +198,7 @@ list then, not before.
 
 | Phase | Goal | Starts when |
 |---|---|---|
-| Cleanup | One one-way PR: `CODEOWNERS`, the code owner rule, the `merger` agent and `/as-merge` are deleted | Your decision |
+| Cleanup | `CODEOWNERS`, the `merger` agent and `/as-merge` are deleted, in one one-way PR made by the advising session on 2026-11-15 | Left for you: turn off **Require review from Code Owners** in ruleset 27289358 |
 | 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | A red PR has cost you an action |
 | 6 | Auto-revert: a broken merge is reverted on `main`, so production heals without rollback and promote | `bug` issues from Phase 3 are frequent |
 | 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
