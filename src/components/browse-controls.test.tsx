@@ -95,6 +95,17 @@ describe("BrowseControls runtime pills", () => {
   });
 });
 
+describe("BrowseControls language pills", () => {
+  it("shows the language row under the runtime row, with the selected language current", () => {
+    renderControls({ language: "fr" });
+    const runtimes = screen.getByRole("navigation", { name: "Runtime" });
+    const nav = screen.getByRole("navigation", { name: "Language" });
+    expect(runtimes.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "French" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: "Any" })).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("BrowseControls clear filters link", () => {
   it("shows one link to clear a selected genre", () => {
     renderControls({ genres: [28] });

@@ -1,6 +1,8 @@
 import {
   DECADES,
   DEFAULT_SORT,
+  LANGUAGES,
+  LANGUAGE_NAMES,
   RATINGS,
   RUNTIMES,
   browseHref,
@@ -379,6 +381,52 @@ describe("browseHref runtime", () => {
 
   it("round-trips a runtime with genres, services, decade, rating and sort", () => {
     const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, rating: 6 as const, runtime: 150 as const, sort: "rating" as const, page: 3 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
+  });
+});
+
+describe("parseBrowseParams language", () => {
+  it("lists English, Spanish, French, Japanese and Korean, in that order", () => {
+    expect(LANGUAGES).toEqual(["en", "es", "fr", "ja", "ko"]);
+    expect(LANGUAGES.map((language) => LANGUAGE_NAMES[language])).toEqual(["English", "Spanish", "French", "Japanese", "Korean"]);
+  });
+
+  it.each(["en", "es", "fr", "ja", "ko"])("reads language=%s", (language) => {
+    expect(parseBrowseParams({ language }, known, "US").language).toBe(language);
+  });
+
+  it("reads Any when the param is absent", () => {
+    expect(parseBrowseParams({}, known, "US").language).toBeUndefined();
+  });
+
+  it.each(["", "EN", "Es", "de", "en-US", "english", " en", "en ", "zh"])("reads language=%j as Any", (language) => {
+    expect(parseBrowseParams({ language }, known, "US").language).toBeUndefined();
+  });
+
+  it("uses the first value when the param repeats", () => {
+    expect(parseBrowseParams({ language: ["ja", "en"] }, known, "US").language).toBe("ja");
+    expect(parseBrowseParams({ language: ["EN", "en"] }, known, "US").language).toBeUndefined();
+  });
+});
+
+describe("browseHref language", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes language=<code> only for a set language", () => {
+    expect(browseHref({ ...base, language: "es" })).toBe("/?language=es");
+    expect(browseHref({ ...base, language: undefined })).toBe("/");
+    expect(browseHref(base)).toBe("/");
+  });
+
+  it("writes the language after the runtime, alongside every other param", () => {
+    expect(
+      browseHref({ ...base, kind: "tv", genres: [18], providers: [8], decade: 1990, rating: 8, runtime: 90, language: "ko", region: "ES", regionFromUrl: true, sort: "release", page: 2 }),
+    ).toBe("/?type=tv&genre=18&providers=8&decade=1990&rating=8&runtime=90&language=ko&region=ES&sort=release&page=2");
+  });
+
+  it("round-trips a language with genres, services, decade, rating, runtime and sort", () => {
+    const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, rating: 6 as const, runtime: 150 as const, language: "fr" as const, sort: "rating" as const, page: 3 };
     const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
     expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
   });
