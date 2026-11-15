@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2600 1260" width="2600" height="1260" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+  <rect width="2600" height="1260" fill="#0b0b0b"/>
+
+  <!-- the loop -->
+  <g fill="none" stroke="#55555b" stroke-width="2.5">
+    <path d="M220 560 H1700"/>
+    <path d="M1700 560 A210 210 0 0 1 1700 980"/>
+    <path d="M1700 980 H900"/>
+    <path d="M900 980 A210 210 0 0 1 900 560"/>
+  </g>
+
+  <!-- direction arrows -->
+  <g fill="#b9b9bd">
+    <polygon points="382,551 400,560 382,569"/>
+    <polygon points="722,551 740,560 722,569"/>
+    <polygon points="1092,551 1110,560 1092,569"/>
+    <polygon points="1492,551 1510,560 1492,569"/>
+    <polygon points="1901,762 1919,762 1910,780"/>
+    <polygon points="1618,971 1600,980 1618,989"/>
+    <polygon points="1318,971 1300,980 1318,989"/>
+    <polygon points="1018,971 1000,980 1018,989"/>
+    <polygon points="681,778 699,778 690,760"/>
+  </g>
+
+  <!-- leaders from the high labels -->
+  <g stroke="#55555b" stroke-width="2" stroke-dasharray="3 7" fill="none">
+    <path d="M220 330 V545"/>
+    <path d="M900 330 V545"/>
+    <path d="M1700 330 V545"/>
+  </g>
+
+  <!-- outcomes -->
+  <g fill="none" stroke="#8a8a90" stroke-width="2" stroke-dasharray="10 8">
+    <path d="M1712 552 C1780 420 1880 300 1985 292"/>
+    <path d="M1712 552 C1790 480 1880 455 1985 452"/>
+    <path d="M1712 566 C1800 610 1860 790 1985 797"/>
+  </g>
+  <path d="M1712 552 C1800 500 1880 630 1985 632" fill="none" stroke="#ff1a1a" stroke-width="3"/>
+
+  <!-- inner arrows -->
+  <g fill="none" stroke="#b9b9bd" stroke-width="2">
+    <path d="M1694 578 C1688 650 1600 684 1412 682"/>
+    <path d="M1150 878 C1128 906 1112 930 1105 958"/>
+  </g>
+  <g fill="#b9b9bd">
+    <polygon points="1416,673 1398,682 1416,691"/>
+    <polygon points="1096,952 1114,956 1102,972"/>
+  </g>
+
+  <!-- nodes -->
+  <g fill="#f2f2f2">
+    <circle cx="220" cy="560" r="10"/>
+    <circle cx="560" cy="560" r="10"/>
+    <circle cx="900" cy="560" r="10"/>
+    <circle cx="1300" cy="560" r="10"/>
+    <circle cx="1700" cy="560" r="10"/>
+    <circle cx="1500" cy="980" r="10"/>
+    <circle cx="1100" cy="980" r="10"/>
+  </g>
+
+  <!-- labels -->
+  <g text-anchor="middle" font-size="30" fill="#a8a8ac">
+    <g font-size="34" font-weight="700" fill="#ffffff">
+      <text x="220" y="150">PRD</text>
+      <text x="560" y="330">Build</text>
+      <text x="900" y="150">Gates</text>
+      <text x="1300" y="330">Deploy</text>
+      <text x="1700" y="150">Detect</text>
+      <text x="1300" y="690">Bug issue</text>
+      <text x="1500" y="1050">Flag off</text>
+      <text x="1100" y="1050">Repair</text>
+    </g>
+
+    <text x="220" y="205">you write it and</text>
+    <text x="220" y="258">label it approved</text>
+
+    <text x="560" y="385">plan, tickets, two reviews,</text>
+    <text x="560" y="438">one pull request</text>
+
+    <text x="900" y="205">CI, door, e2e on the preview</text>
+    <text x="900" y="258">a green PR merges itself</text>
+
+    <text x="1300" y="385">main goes live</text>
+    <text x="1300" y="438">in production</text>
+
+    <text x="1700" y="205">smoke test after each deploy</text>
+    <text x="1700" y="258">Sentry errors every hour</text>
+
+    <text x="1300" y="745">names the pull request to blame</text>
+    <text x="1300" y="798">label repair starts the repair</text>
+    <text x="1300" y="851">closes when the fix is live</text>
+
+    <text x="1500" y="1105">the feature is switched off,</text>
+    <text x="1500" y="1158">if its PR has a flag</text>
+
+    <text x="1100" y="1105">a failing test, then the fix,</text>
+    <text x="1100" y="1158">one PR, or parked for you</text>
+
+    <text x="1612" y="738" font-size="28">opens</text>
+    <text x="1062" y="925" font-size="28">starts</text>
+
+    <!-- who does it -->
+    <g font-size="22" fill="#6c6c72" font-family="'Cascadia Mono', Consolas, monospace">
+      <text x="220" y="305">you</text>
+      <text x="560" y="485">reelbase-factory-v1</text>
+      <text x="900" y="305">GitHub Actions</text>
+      <text x="1300" y="485">Vercel</text>
+      <text x="1700" y="305">smoke.yml · sentry-watch-v1</text>
+      <text x="1500" y="1205">reelbase-flag-off-v1 · sentry-watch-v1</text>
+      <text x="1100" y="1205">reelbase-repair-v1</text>
+    </g>
+  </g>
+
+  <g font-size="30" fill="#a8a8ac">
+    <g font-size="34" font-weight="700" fill="#b9b9bd">
+      <text x="2010" y="300">Healthy</text>
+      <text x="2010" y="460">Fix is live</text>
+      <text x="2010" y="640" fill="#ff1a1a">Bug from a merged PR</text>
+      <text x="2010" y="805">Bug with no PR to blame</text>
+    </g>
+    <text x="2010" y="352">issues close, the PRD is done</text>
+    <text x="2010" y="512">flag back on, bug closed</text>
+    <text x="2010" y="692">fixed forward, never rolled back</text>
+    <text x="2010" y="857">stays open for you</text>
+  </g>
+</svg>
