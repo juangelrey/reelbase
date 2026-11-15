@@ -1,6 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { SORT_KEYS, browseHref, toggleId, type BrowseState, type SortKey } from "@/lib/catalog/browse-params";
+import {
+  SORT_KEYS,
+  browseHref,
+  clearFiltersHref,
+  hasFilters,
+  toggleId,
+  type BrowseState,
+  type SortKey,
+} from "@/lib/catalog/browse-params";
 import type { Genre } from "@/lib/catalog/types";
 import { DecadeFilter } from "./decade-filter";
 
@@ -105,6 +113,11 @@ export function BrowseControls({ genres, state, children }: BrowseControlsProps)
         </ul>
       </nav>
       <DecadeFilter state={state} />
+      {hasFilters(state) && (
+        <Link href={clearFiltersHref(state)} className={`${FOCUS} inline-block text-xs text-zinc-400 underline hover:text-strong`}>
+          Clear filters
+        </Link>
+      )}
     </div>
   );
 }

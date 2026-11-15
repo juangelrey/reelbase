@@ -146,3 +146,13 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   const search = query.toString().replaceAll("%2C", ",");
   return search ? `/?${search}` : "/";
 }
+
+/** Whether the state applies a genre, a service or a decade: what "Clear filters" removes. */
+export function hasFilters({ genres, providers, decade }: BrowseState): boolean {
+  return genres.length > 0 || providers.length > 0 || decade !== undefined;
+}
+
+/** The home page URL without genres, services or decade, from page 1; `type`, `sort` and `region` follow `browseHref`. */
+export function clearFiltersHref(state: BrowseState): string {
+  return browseHref({ ...state, genres: [], providers: [], decade: undefined, page: 1 });
+}
