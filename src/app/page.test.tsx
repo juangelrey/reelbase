@@ -67,14 +67,18 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-/** The LaunchDarkly flags as this request sees them; the marquee layout is on unless a test turns it off. */
-const flags = vi.hoisted(() => ({ marqueeHome: true }));
+/** The LaunchDarkly flags as this request sees them; the marquee layout and the kill switches are on unless a test turns them off. */
+const flags = vi.hoisted(() => ({ marqueeHome: true, killSwitches: {} as Record<string, boolean> }));
 
-vi.mock("@/lib/flags/flags", () => ({ isMarqueeHome: vi.fn(async () => flags.marqueeHome) }));
+vi.mock("@/lib/flags/flags", () => ({
+  isMarqueeHome: vi.fn(async () => flags.marqueeHome),
+  isFlagOn: vi.fn(async (key: string) => flags.killSwitches[key] ?? true),
+}));
 
 beforeEach(() => {
   vi.stubEnv("TMDB_READ_ACCESS_TOKEN", "test-token");
   flags.marqueeHome = true;
+  flags.killSwitches = {};
   request.regionCookie = undefined;
   request.acceptLanguage = undefined;
 });
@@ -673,10 +677,52 @@ describe("Home page streaming services", () => {
     [{ genre: "28", providers: "8", rating: "7", runtime: "150", language: "en" }, "No titles rated 7+ under 150 min in English match this genre on this service. Try removing one, or show all titles."],
     [{ language: "EN" }, "No titles to show right now."],
   ])("names the active filters when nothing matches %o", async (params, message) => {
+    for (const decadeEmptyHint of [true, false]) {
+      flags.killSwitches = { "decade-empty-hint": decadeEmptyHint };
+      stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
+      await renderHome(params);
+      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Streaming data by JustWatch" })).toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it.each([
+    [{ decade: "1990" }, "No titles from the 1990s to show. Try another one, or show all titles."],
+    [{ type: "tv", decade: "1990" }, "No series from the 1990s to show. Try another one, or show all series."],
+    [{ decade: "1990", genre: "28" }, "No titles from the 1990s match this genre. Try removing one, or show all titles."],
+    [{ decade: "1990", providers: "8" }, "No titles from the 1990s stream on this service. Try removing one, or show all titles."],
+    [{ decade: "2010", rating: "7" }, "No titles from the 2010s rated 7+ to show. Try removing one, or show all titles."],
+    [{ decade: "2010", runtime: "90" }, "No titles from the 2010s under 90 min to show. Try removing one, or show all titles."],
+    [{ decade: "2010", language: "es" }, "No titles from the 2010s in Spanish to show. Try removing one, or show all titles."],
+    [{ type: "tv", decade: "2000", genre: "18", providers: "8" }, "No series from the 2000s match this genre on this service. Try removing one, or show all series."],
+    [
+      { decade: "1990", genre: "28", rating: "7", runtime: "120", language: "es" },
+      "No titles from the 1990s rated 7+ under 120 min in Spanish match this genre. Try removing one, or show all titles.",
+    ],
+  ])("names the decade when nothing matches %o with decade-empty-hint on", async (params, message) => {
     stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
     await renderHome(params);
     expect(screen.getByText(message)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Streaming data by JustWatch" })).toBeInTheDocument();
+  });
+
+  it.each([
+    [{ decade: "1990" }, "No titles to show right now."],
+    [{ type: "tv", decade: "1990" }, "No series to show right now."],
+    [{ decade: "1990", genre: "28" }, "No titles match this genre. Try another one, or show all titles."],
+    [{ decade: "1990", providers: "8" }, "No titles stream on this service. Try another one, or show all titles."],
+    [{ decade: "2010", rating: "7" }, "No titles rated 7+ to show. Try another one, or show all titles."],
+    [{ decade: "2010", runtime: "90" }, "No titles under 90 min to show. Try another one, or show all titles."],
+    [{ decade: "2010", language: "es" }, "No titles in Spanish to show. Try another one, or show all titles."],
+    [
+      { decade: "1990", genre: "28", rating: "7", runtime: "120", language: "es" },
+      "No titles rated 7+ under 120 min in Spanish match this genre. Try removing one, or show all titles.",
+    ],
+  ])("leaves the decade out when nothing matches %o with decade-empty-hint off", async (params, message) => {
+    flags.killSwitches = { "decade-empty-hint": false };
+    stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
+    await renderHome(params);
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
   it("sends a page past the last one back to page 1, keeping the services", async () => {
