@@ -63,8 +63,9 @@ the bypass option.
 **Two limits, both accepted on 2026-11-15:**
 
 - The gates are not protected from the PR they judge. The checks run from the PR's own copy of the
-  workflow files, and the code owner rule passes for the PR's author (#123). What stands in the way
-  is `door`, which calls such a PR one-way, and the run's rule never to edit CI or skills.
+  workflow files, and no rule asks for anyone else's review (the code owner rule passed for the
+  PR's author, #123, and is off since #160). What stands in the way is `door`, which calls such a
+  PR one-way, and the run's rule never to edit CI or skills.
 - A merge made by `GITHUB_TOKEN` does not close the issues its PR names. Phase 3 closes them.
 
 **One rule for secrets:** a secret that can merge or deploy is stored in a GitHub Environment
@@ -198,15 +199,15 @@ list then, not before.
 
 | Phase | Goal | Starts when |
 |---|---|---|
-| Cleanup | `CODEOWNERS`, the `merger` agent and `/as-merge` are deleted, in one one-way PR made by the advising session on 2026-11-15 | Left for you: turn off **Require review from Code Owners** in ruleset 27289358 |
-| 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | A red PR has cost you an action |
+| Cleanup | `CODEOWNERS`, the `merger` agent and `/as-merge` are deleted, in one one-way PR made by the advising session on 2026-11-15 | Done (#160). The code owner rule is off in ruleset 27289358 |
+| 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | Started 2026-11-15 by your decision, ahead of its condition. Scope [below](#phase-5-self-heal) |
 | 6 | Auto-revert: a broken merge is reverted on `main`, so production heals without rollback and promote | `bug` issues from Phase 3 are frequent |
 | 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
 | 8 | Flags: each user-visible feature ships behind a flag, and an error spike turns it off | Your decision; it adds work to every product PRD |
 | 9 | Widen: the one-way list shrinks | Metrics from many runs |
 
-- Phase 5 reverses a Phase 2 decision, that the run ends after it opens the PR, and spends tokens
-  while it waits.
+- Phase 5 reverses a Phase 2 decision, that the run ends after it opens the PR. It does not wait
+  actively: the PR watch wakes the session, so tokens are spent only when an event arrives.
 - Phase 6 needs the door script to call an exact revert two-way. Today it calls a revert one-way,
   because it deletes files and tests.
 - Phase 7 keeps your approval on every `bug` issue, and first needs proof that a cloud task can
@@ -219,6 +220,56 @@ list then, not before.
   - Environments named `Production` and `Preview` already exist, created by Vercel. A token's
     Environment needs another name.
 
+### Phase 5: self-heal
+
+**Goal:** a red check that the PR's own change caused is fixed by the run, and the PR merges
+without you. When the run cannot fix it, it tells you.
+
+**It is built on auto-fix,** a documented Claude Code feature: a session watches a pull request
+and is woken when a check fails. The run does not wait actively. No test comes first: the feature
+is the provider's, and what is ours is proven by "Done when".
+
+**Scope, one PR, one file, `.claude/skills/as-build/autonomous.md`, step 8:**
+
+1. In `dark`, once the PR is open and the run has commented on the `prd` issue, the run leaves
+   auto-fix on for the PR and ends its turn.
+2. Auto-fix does the fixing. Step 8 states only its limits:
+   - It never fixes a failed `door`, which means the PR is one-way and waits for you, or a
+     plumbing failure.
+   - It pushes a fix only when `scripts/door.mjs` still says two-way. So a fix cannot delete or
+     skip a test, or touch CI, skills, scripts or config.
+   - It pushes at most 2 fixes per PR.
+3. When it cannot fix within these limits, or would ask you, the run comments the reason on the
+   `prd` issue, turns auto-fix off and ends.
+4. `auto` and the default mode are unchanged.
+
+**One setting, by you, after the PR is merged:** the End section of the task's prompt, under
+[Cloud task](#cloud-task), becomes the text below. Until then the old prompt wins and runs end as
+they do today.
+
+```text
+End
+- When the pull request is open, comment on the `prd` issue with a
+  link to it and a summary.
+- Then follow step 8 of `autonomous.md`: keep the watch on the pull
+  request, and fix a red check as that step says.
+- Do not merge and do not close issues: the pull request merges
+  itself, and the issues close after the deploy.
+- If nothing could be built, comment the reason on the `prd` issue
+  and stop.
+```
+
+**How it is built:** as Cleanup was (#160): the advising session edits step 8 directly, with no
+PRD and no factory run. `door` calls it one-way, so you merge it with the bypass option.
+
+**Not in this phase:** a failed production deploy or smoke test, which is Phase 6; merge
+conflicts, which the watch cannot see; review comments from people; telling you about a run that
+died; running e2e in the cloud before the push, which stays in the [Backlog](#backlog); any
+change to CI, `door` or `automerge.yml`.
+
+**Done when:** a product PRD you label reaches production with no other action from you, and its
+run left auto-fix on for the PR instead of turning it off.
+
 ## Later
 
 Beyond the goal and outside the phases. Each needs your decision.
@@ -228,8 +279,8 @@ Beyond the goal and outside the phases. Each needs your decision.
 - `door` fails when the PR body says `**Door:** one-way`; today a builder can call its own PR
   one-way and it still merges itself.
 - Gate protection: a PR that touches `.github/`, `.claude/` or `scripts/` cannot merge itself.
-  Either the code owner is an account that runs do not act as, or a required check runs from
-  `main`.
+  Either `CODEOWNERS` and the code owner rule come back with an owner that runs do not act as, or
+  a required check runs from `main`.
 - Agent verification: controls migrated to ui-sdk, a verifier that runs each PR's manual checks, and
   holdout scenarios.
 - Intake: an issue becomes a draft PRD.
@@ -267,6 +318,7 @@ deployments, and previews need it, so it stays a repository secret.
 - The advising session steers and does not write code.
 - The factory's plumbing must not block product work.
 - An open question is settled by the cheapest check, not by a factory run.
+- A provider's documented feature is used, not tested. What is tested is the pipeline.
 
 **How they are applied**
 
