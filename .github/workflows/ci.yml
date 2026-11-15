@@ -69,7 +69,7 @@ jobs:
           printf '%s diff\n' '*.[jt]s' '*.[jt]sx' '*.[cm][jt]s' '*.[cm][jt]sx' > .git/info/attributes
           node "$RUNNER_TEMP/base/scripts/test-integrity.mjs" "$BASE_SHA" "$HEAD_SHA"
 
-  # Informs, never gates: every step ends green whatever the verdict.
+  # Writes its report first, then gates: the last step fails on a one-way verdict, so the PR waits for the owner.
   door:
     name: door
     if: github.event_name == 'pull_request'
@@ -130,4 +130,12 @@ jobs:
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/door.md" --silent
           else
             gh api --method POST "$COMMENTS" -F body=@"$RUNNER_TEMP/door.md" --silent
+          fi
+      # Last, so the job summary and the PR comment are written whatever the verdict. Matches the verdict line
+      # that the script and the `one_way` helper both write; table rows start with `|`, so they never match.
+      - name: Fail on a one-way verdict
+        run: |
+          if grep -qE '^\*\*Door:\*\* one-way( |$)' "$RUNNER_TEMP/door.md"; then
+            echo "::error title=door one-way::This PR is a one-way door, so it waits for the owner."
+            exit 1
           fi
