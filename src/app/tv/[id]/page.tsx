@@ -14,10 +14,6 @@ interface ShowPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-// `?season` makes this page dynamic: it renders per request (never at build time), and its TMDB
-// responses stay in the fetch cache for an hour, so a repeat view makes no TMDB call.
-export const revalidate = 3600;
-
 /** Today's date as "YYYY-MM-DD" (UTC), which decides which episodes are upcoming. */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
