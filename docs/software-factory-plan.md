@@ -200,16 +200,14 @@ list then, not before.
 | Phase | Goal | Starts when |
 |---|---|---|
 | Cleanup | `CODEOWNERS`, the `merger` agent and `/as-merge` are deleted, in one one-way PR made by the advising session on 2026-11-15 | Done (#160). The code owner rule is off in ruleset 27289358 |
-| 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | Started 2026-11-15 by your decision, ahead of its condition. Scope [below](#phase-5-self-heal) |
-| 6 | Auto-revert: a broken merge is reverted on `main`, so production heals without rollback and promote | `bug` issues from Phase 3 are frequent |
+| 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | Done 2026-11-15 (#161, task prompt). Scope [below](#phase-5-self-heal) |
+| 6 | Auto-revert: a broken merge is reverted on `main` | Dropped 2026-11-15. A flag turned off heals in seconds with no PR and no deploy, and the code stays on `main` |
 | 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
-| 8 | Flags: each user-visible feature ships behind a flag, and an error spike turns it off | Your decision; it adds work to every product PRD |
+| 8 | Flags: each user-visible feature ships behind a flag, and a failed smoke test turns it off | Started 2026-11-15, before Phase 7. Scope [below](#phase-8-flags) |
 | 9 | Widen: the one-way list shrinks | Metrics from many runs |
 
 - Phase 5 reverses a Phase 2 decision, that the run ends after it opens the PR. It does not wait
   actively: the PR watch wakes the session, so tokens are spent only when an event arrives.
-- Phase 6 needs the door script to call an exact revert two-way. Today it calls a revert one-way,
-  because it deletes files and tests.
 - Phase 7 keeps your approval on every `bug` issue, and first needs proof that a cloud task can
   read Sentry through a claude.ai connector.
 - If a workflow ever rolls back or promotes on Vercel, three findings from 2026-11-15 apply:
@@ -243,32 +241,38 @@ is the provider's, and what is ours is proven by "Done when".
    `prd` issue, turns auto-fix off and ends.
 4. `auto` and the default mode are unchanged.
 
-**One setting, by you, after the PR is merged:** the End section of the task's prompt, under
-[Cloud task](#cloud-task), becomes the text below. Until then the old prompt wins and runs end as
-they do today.
+**One setting, changed by you on 2026-11-15:** the End section of the task's prompt, under
+[Cloud task](#cloud-task), no longer tells the run to stop without waiting for checks. It points
+to step 8.
 
-```text
-End
-- When the pull request is open, comment on the `prd` issue with a
-  link to it and a summary.
-- Then follow step 8 of `autonomous.md`: keep the watch on the pull
-  request, and fix a red check as that step says.
-- Do not merge and do not close issues: the pull request merges
-  itself, and the issues close after the deploy.
-- If nothing could be built, comment the reason on the `prd` issue
-  and stop.
-```
-
-**How it is built:** as Cleanup was (#160): the advising session edits step 8 directly, with no
-PRD and no factory run. `door` calls it one-way, so you merge it with the bypass option.
+**How it was built:** as Cleanup was (#160): the advising session edited step 8 directly, with
+no PRD and no factory run, and you merged it as #161.
 
 **Not in this phase:** a failed production deploy or smoke test, which is Phase 6; merge
 conflicts, which the watch cannot see; review comments from people; telling you about a run that
 died; running e2e in the cloud before the push, which stays in the [Backlog](#backlog); any
 change to CI, `door` or `automerge.yml`.
 
-**Done when:** a product PRD you label reaches production with no other action from you, and its
-run left auto-fix on for the PR instead of turning it off.
+**Done:** closed by you on 2026-11-15 without waiting for a run. It is a setting that is on, and
+the next PRD shows it anyway.
+
+### Phase 8: flags
+
+**Goal:** a broken feature is switched off in seconds, with no revert and no deploy.
+
+1. **Helper, done (#162, #165):** `isFlagOn(key)` in `src/lib/flags/flags.ts`. It is a kill switch:
+   on unless the flag serves `false`, so a missing flag or an unreachable LaunchDarkly leaves the
+   feature on. A feature calls it from its own code, so adding a flag is two-way.
+2. **Build rule:** a PRD names a flag key under `## Flag`. The run puts the change behind it,
+   creates the flag in LaunchDarkly project `reelbase` serving `true` in every environment,
+   through the task's LaunchDarkly connector, and names it in the PR body. Made by the advising
+   session as an edit to `/as-spec` and `as-build`.
+3. **Automatic off:** when the smoke test fails, the flag named in the failing PR is turned off.
+   Not designed yet.
+
+**Limits:** the app has one visitor context, so a flag is on or off for everyone and there is no
+gradual rollout. Breakage outside the flagged code stays with you and Instant Rollback. Removing
+old flags is not in this phase.
 
 ## Later
 
@@ -352,11 +356,12 @@ Work
 - Where the skill says to stop and ask, park the ticket instead.
 
 End
-- The run is finished when the pull request is open and you have
-  commented on the `prd` issue with a link to it and a summary.
-- Then stop. Do not wait for checks, do not merge, and do not close
-  issues: the pull request merges itself, and the issues close after
-  the deploy.
+- When the pull request is open, comment on the `prd` issue with a
+  link to it and a summary.
+- Then follow step 8 of `autonomous.md`: keep the watch on the pull
+  request, and fix a red check as that step says.
+- Do not merge and do not close issues: the pull request merges
+  itself, and the issues close after the deploy.
 - If nothing could be built, comment the reason on the `prd` issue
   and stop.
 ```

@@ -31,6 +31,9 @@ Ask the human clarifying questions until every template section below can be fil
 ## Behaviour
 - [One specific, testable condition per line, each decided, none open; turn vague asks into measured targets]
 
+## Flag
+[A kebab-case flag key when the work changes what a visitor sees or can do; otherwise `None`]
+
 ## Out of scope
 - [What is not built]
 - Paths outside [the paths this work may change]
