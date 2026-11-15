@@ -60,10 +60,17 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** System / Light / Dark radios. The choice is saved per browser; System follows the OS, live. */
-export function ThemeToggle() {
-  // System on the server and during hydration, then the stored choice.
-  const choice = useSyncExternalStore(subscribe, readChoice, () => "system" as const);
+/** The stored choice: System on the server and during hydration, then what storage holds. */
+function useThemeChoice(): ThemeChoice {
+  return useSyncExternalStore(subscribe, readChoice, () => "system" as const);
+}
+
+/**
+ * Keeps `data-theme` on <html> in step with the stored choice, and follows the OS live while it is System.
+ * Mounted once from the layout, so this works on every page, whether or not the toggle is on it. Renders nothing.
+ */
+export function ThemeSync() {
+  const choice = useThemeChoice();
 
   useLayoutEffect(() => {
     // Reads storage itself rather than `choice`, which is still System during hydration. Also restores the
@@ -79,6 +86,13 @@ export function ThemeToggle() {
     query.addEventListener("change", applyTheme);
     return () => query.removeEventListener("change", applyTheme);
   }, [choice]);
+
+  return null;
+}
+
+/** System / Light / Dark radios. The choice is saved per browser; ThemeSync applies it and follows the OS. */
+export function ThemeToggle() {
+  const choice = useThemeChoice();
 
   return (
     <fieldset className="inline-flex rounded-md border border-zinc-700 p-0.5 text-sm">

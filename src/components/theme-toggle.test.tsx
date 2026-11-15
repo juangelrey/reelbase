@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { THEME_STORAGE_KEY } from "@/lib/theme/theme";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeSync, ThemeToggle } from "./theme-toggle";
 
 /** A fake OS colour preference. `change` handlers are kept, so `setPrefersLight` notifies them as the OS would. */
 function stubOs({ prefersLight }: { prefersLight: boolean }) {
@@ -31,6 +31,40 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+/** The toggle as the app mounts it: ThemeSync comes from the layout, on every page. */
+function WithThemeSync() {
+  return (
+    <>
+      <ThemeSync />
+      <ThemeToggle />
+    </>
+  );
+}
+
+describe("ThemeSync", () => {
+  it("follows a live OS change on System, on a page without the toggle", () => {
+    const os = stubOs({ prefersLight: false });
+    render(<ThemeSync />);
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    os.setPrefersLight(true);
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("applies a stored choice on mount and ignores the OS, on a page without the toggle", () => {
+    const os = stubOs({ prefersLight: false });
+    localStorage.setItem(THEME_STORAGE_KEY, "light");
+    render(<ThemeSync />);
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    os.setPrefersLight(false);
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("renders nothing", () => {
+    const { container } = render(<ThemeSync />);
+    expect(container).toBeEmptyDOMElement();
+  });
 });
 
 describe("ThemeToggle", () => {
@@ -73,7 +107,7 @@ describe("ThemeToggle", () => {
 
   it("follows a live OS change while System is selected", () => {
     const os = stubOs({ prefersLight: false });
-    render(<ThemeToggle />);
+    render(<WithThemeSync />);
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     os.setPrefersLight(true);
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
@@ -81,7 +115,7 @@ describe("ThemeToggle", () => {
 
   it("ignores a live OS change once Dark is chosen", async () => {
     const os = stubOs({ prefersLight: false });
-    render(<ThemeToggle />);
+    render(<WithThemeSync />);
     await userEvent.click(screen.getByRole("radio", { name: "Dark" }));
     os.setPrefersLight(true);
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
@@ -89,7 +123,7 @@ describe("ThemeToggle", () => {
 
   it("re-applies the stored theme on mount, after React has reset <html>", () => {
     localStorage.setItem(THEME_STORAGE_KEY, "light");
-    render(<ThemeToggle />);
+    render(<WithThemeSync />);
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 

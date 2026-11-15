@@ -41,8 +41,9 @@ describe("loading skeletons", () => {
 });
 
 describe("RootLayout view transitions", () => {
-  it("names the footer so it stays still while main crossfades", () => {
-    const html = renderToStaticMarkup(<RootLayout>page</RootLayout>);
+  it("names the footer so it stays still while main crossfades", async () => {
+    // An async server component: awaited first, since the static renderer does not await.
+    const html = renderToStaticMarkup(await RootLayout({ children: "page" }));
     expect(html).toMatch(/<footer[^>]*style="view-transition-name:site-footer"/);
   });
 });
