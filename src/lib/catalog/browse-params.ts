@@ -210,15 +210,25 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   return search ? `/?${search}` : "/";
 }
 
-/** Whether the state applies a genre, a service, a decade, a rating or a runtime: what "Clear filters" removes. */
-export function hasFilters({ genres, providers, decade, rating, runtime }: BrowseState): boolean {
-  return genres.length > 0 || providers.length > 0 || decade !== undefined || rating !== undefined || runtime !== undefined;
+/**
+ * Whether the state applies a genre, a service, a decade, a rating, a runtime or a language: what "Clear filters"
+ * removes.
+ */
+export function hasFilters({ genres, providers, decade, rating, runtime, language }: BrowseState): boolean {
+  return (
+    genres.length > 0 ||
+    providers.length > 0 ||
+    decade !== undefined ||
+    rating !== undefined ||
+    runtime !== undefined ||
+    language !== undefined
+  );
 }
 
 /**
- * The home page URL without genres, services, decade, rating or runtime, from page 1; `type`, `sort` and `region`
- * follow `browseHref`.
+ * The home page URL without genres, services, decade, rating, runtime or language, from page 1; `type`, `sort` and
+ * `region` follow `browseHref`.
  */
 export function clearFiltersHref(state: BrowseState): string {
-  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, runtime: undefined, page: 1 });
+  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, runtime: undefined, language: undefined, page: 1 });
 }
