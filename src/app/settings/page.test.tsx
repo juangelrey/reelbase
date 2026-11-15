@@ -163,7 +163,7 @@ describe("Settings page My services", () => {
       .map((box) => Number(box.getAttribute("value")));
   }
 
-  it("follows Region with a My services section: a checkbox per streaming service of the region, with the JustWatch credit", async () => {
+  it("follows Region with a My services section: a checkbox per streaming service of the region, with no links", async () => {
     render(await SettingsPage());
     const sections = screen.getAllByRole("region");
     expect(sections).toHaveLength(3);
@@ -172,8 +172,21 @@ describe("Settings page My services", () => {
     const boxes = within(myServices()).getAllByRole("checkbox");
     expect(boxes.map((box) => Number(box.getAttribute("value")))).toEqual([8, 9, 350, 337, 15, 2285, 257, 1899, 386, 531, 300, 73]);
     expect(within(myServices()).getByRole("checkbox", { name: "Netflix" })).not.toBeChecked();
-    expect(within(myServices()).getByRole("link", { name: "Streaming data by JustWatch" })).toBeInTheDocument();
+    expect(within(myServices()).getByRole("checkbox", { name: "JustWatch TV Free" })).toBeInTheDocument();
+    expect(within(myServices()).queryByRole("link")).not.toBeInTheDocument();
     expect(within(myServices()).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("renders no link to justwatch.com anywhere on the page", async () => {
+    const { container } = render(await SettingsPage());
+    expect(container.querySelector('a[href*="justwatch.com"]')).toBeNull();
+    expect(screen.queryByText("Streaming data by JustWatch")).not.toBeInTheDocument();
+  });
+
+  it("credits JustWatch with the list when flag services-from-settings is off", async () => {
+    flags.killSwitches["services-from-settings"] = false;
+    render(await SettingsPage());
+    expect(within(myServices()).getByRole("link", { name: "Streaming data by JustWatch" })).toHaveAttribute("href", "https://www.justwatch.com/");
   });
 
   it("ticks the services saved in the cookie, so they show after a reload", async () => {

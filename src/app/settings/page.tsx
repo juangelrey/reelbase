@@ -35,7 +35,7 @@ export default async function SettingsPage() {
     },
     regions.map(({ code }) => code),
   );
-  const services = await listStreamingServices(region);
+  const [services, servicesFromSettings] = await Promise.all([listStreamingServices(region), isFlagOn("services-from-settings")]);
   const saved = parseSavedServices(cookieStore.get(SERVICES_COOKIE)?.value);
   return (
     <div className="space-y-8">
@@ -58,7 +58,7 @@ export default async function SettingsPage() {
           My services
         </h2>
         {/* Saved ids this region does not list are passed too, so a toggle here keeps them. */}
-        <MyServices services={services} saved={saved} />
+        <MyServices services={services} saved={saved} credit={!servicesFromSettings} />
       </section>
     </div>
   );

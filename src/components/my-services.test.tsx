@@ -117,9 +117,16 @@ describe("MyServices", () => {
     expect(screen.getByRole("checkbox", { name: "Netflix" })).not.toBeChecked();
   });
 
-  it("credits JustWatch with the list", () => {
-    render(<MyServices services={SERVICES} saved={[]} />);
+  it("credits JustWatch with the list when asked to, as with flag services-from-settings off", () => {
+    render(<MyServices services={SERVICES} saved={[]} credit />);
     expect(screen.getByRole("link", { name: "Streaming data by JustWatch" })).toHaveAttribute("href", "https://www.justwatch.com/");
+  });
+
+  it("links nowhere by default, and still lists a service named after JustWatch under its name", () => {
+    const services = [...SERVICES, { id: 2285, name: "JustWatch TV Free", logoUrl: LOGO("jwfree") }];
+    render(<MyServices services={services} saved={[]} />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "JustWatch TV Free" })).toBeInTheDocument();
   });
 
   it("says so when the region lists no services", () => {
