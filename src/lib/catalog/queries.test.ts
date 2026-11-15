@@ -329,6 +329,41 @@ describe("discoverTitles", () => {
     expect(params.get("primary_release_date.lte")).toBe(lte);
     expect(params.get("vote_count.gte")).toBe("50");
   });
+  it.each(["popularity", "rating", "release", "title"] as const)(
+    "with a rating, asks for at least that average and 200 votes in the %s sort",
+    async (sort) => {
+      const fetchMock = stubFetch(discover);
+      await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating: 7 });
+      const params = requestedUrl(fetchMock).searchParams;
+      expect(params.get("vote_average.gte")).toBe("7");
+      expect(params.get("vote_count.gte")).toBe("200");
+    },
+  );
+
+  it.each([6, 7, 8] as const)("sends rating %i with genre, service and decade filters", async (rating) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [18], sort: "release", page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("vote_average.gte")).toBe(String(rating));
+    expect(params.get("vote_count.gte")).toBe("200");
+    expect(params.get("with_genres")).toBe("18");
+    expect(params.get("with_watch_providers")).toBe("8");
+    expect(params.get("primary_release_date.gte")).toBe("2010-01-01");
+    expect(params.get("sort_by")).toBe("primary_release_date.desc");
+  });
+
+  it.each([
+    ["popularity", null],
+    ["rating", "200"],
+    ["release", "50"],
+    ["title", null],
+  ] as const)("without a rating, sends no average floor and keeps the %s sort's vote floor", async (sort, voteCount) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [] });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("vote_average.gte")).toBe(false);
+    expect(params.get("vote_count.gte")).toBe(voteCount);
+  });
 });
 
 describe("discoverShows", () => {
@@ -427,6 +462,41 @@ describe("discoverShows", () => {
     expect(params.get("first_air_date.gte")).toBe(gte);
     expect(params.get("first_air_date.lte")).toBe(lte);
     expect(params.get("vote_count.gte")).toBe("50");
+  });
+  it.each(["popularity", "rating", "release", "title"] as const)(
+    "with a rating, asks for at least that average and 200 votes in the %s sort",
+    async (sort) => {
+      const fetchMock = stubFetch(discoverTv);
+      await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating: 7 });
+      const params = requestedUrl(fetchMock).searchParams;
+      expect(params.get("vote_average.gte")).toBe("7");
+      expect(params.get("vote_count.gte")).toBe("200");
+    },
+  );
+
+  it.each([6, 7, 8] as const)("sends rating %i with genre, service and decade filters", async (rating) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [18], sort: "release", page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.get("vote_average.gte")).toBe(String(rating));
+    expect(params.get("vote_count.gte")).toBe("200");
+    expect(params.get("with_genres")).toBe("18");
+    expect(params.get("with_watch_providers")).toBe("8");
+    expect(params.get("first_air_date.gte")).toBe("2010-01-01");
+    expect(params.get("sort_by")).toBe("first_air_date.desc");
+  });
+
+  it.each([
+    ["popularity", null],
+    ["rating", "200"],
+    ["release", "50"],
+    ["title", null],
+  ] as const)("without a rating, sends no average floor and keeps the %s sort's vote floor", async (sort, voteCount) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [] });
+    const params = requestedUrl(fetchMock).searchParams;
+    expect(params.has("vote_average.gte")).toBe(false);
+    expect(params.get("vote_count.gte")).toBe(voteCount);
   });
 });
 
