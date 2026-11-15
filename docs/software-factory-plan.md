@@ -132,7 +132,7 @@ why the production smoke test can be thin.
 
 **Goal:** putting `approved` on a PRD is your last action.
 
-**The trigger, set up on 2026-11-15** on the task `reelbase-factory`:
+**The trigger, set up on 2026-11-15** on the task `reelbase-factory-v1`:
 
 | Field | Value |
 |---|---|
@@ -269,14 +269,14 @@ the next PRD shows it anyway.
    creates the flag in LaunchDarkly project `reelbase`, turned on in every environment,
    through the task's LaunchDarkly connector, and names it in the PR body. Made by the advising
    session as an edit to `/as-spec` and `as-build`.
-3. **Automatic off, switched on by you on 2026-11-15:** a second cloud task, `reelbase-flag-off`
+3. **Automatic off, switched on by you on 2026-11-15:** a second cloud task, `reelbase-flag-off-v1`
    under [Cloud task](#cloud-task), starts on a `bug` issue. It turns off the flag named in the
    failing PR and requests the home page. On a 200 it says so on the issue; otherwise it turns
    the flag back on. Either way it labels the issue `repair`, which starts
    [Phase 7](#phase-7-repair). It changes no code and uses no new secret. Not observed yet.
 
-4. **Sentry watch, switched on by you on 2026-11-15:** a third cloud task, `reelbase-sentry-watch`
-   under [Cloud task](#cloud-task), runs every hour. For each new production error in Sentry it
+4. **Sentry watch, switched on by you on 2026-11-15:** a third cloud task,
+   `reelbase-sentry-watch-v1` under [Cloud task](#cloud-task), runs every hour. For each new production error in Sentry it
    goes from the error's first release, which is the deployed commit, to the merged PR and its
    flag, turns that flag off and opens a `bug` issue. It turns nothing off when the error was not
    introduced by the newest commit on `main`. Sentry's own alert action that opens a GitHub issue
@@ -305,11 +305,11 @@ production stays broken until the fix deploys, about 20 minutes: accepted by you
 2. The same file's last section, After the merge: once the fix is deployed, the flag is turned
    back on, and a later run closes the bug when the home page answers 200 and Sentry is quiet.
 3. `as-build` never creates a flag or changes one's state in `repair`.
-4. A fourth cloud task, `reelbase-repair` under [Cloud task](#cloud-task), starts on an open
-   issue labeled `bug` and `repair`. `reelbase-factory` is unchanged, so a repair can never take
+4. A fourth cloud task, `reelbase-repair-v1` under [Cloud task](#cloud-task), starts on an open
+   issue labeled `bug` and `repair`. `reelbase-factory-v1` is unchanged, so a repair can never take
    the run of a PRD.
-5. `reelbase-flag-off` and `reelbase-sentry-watch` add `repair` to a bug that names its pull
-   request. `reelbase-sentry-watch` follows After the merge in every hourly run.
+5. `reelbase-flag-off-v1` and `reelbase-sentry-watch-v1` add `repair` to a bug that names its pull
+   request. `reelbase-sentry-watch-v1` follows After the merge in every hourly run.
 6. Text from Sentry never reaches the builder: the watch copies only the error's type and its
    stack frames, and titles the issue with the Sentry short ID.
 
@@ -328,7 +328,7 @@ added and the reason is commented. A parked bug gets no second attempt.
 - After an Instant Rollback the merged fix is not live until you promote it, and the sweep tests
   the old version.
 - A feature returns up to two hourly runs after its fix deploys.
-- Any label added later to an open `bug` and `repair` issue starts a `reelbase-repair` run. The
+- Any label added later to an open `bug` and `repair` issue starts a `reelbase-repair-v1` run. The
   claim comment makes it stop.
 
 **Not in this phase:** triage, which is a step that reads a `bug` with no pull request to blame
@@ -404,7 +404,7 @@ deployments, and previews need it, so it stays a repository secret.
 
 ## Cloud task
 
-Task `reelbase-factory`: repository `reelbase`, Default environment, coordinator model Opus,
+Task `reelbase-factory-v1`: repository `reelbase`, Default environment, coordinator model Opus,
 LaunchDarkly connector. Trigger as under [Phase 4](#phase-4-start-done).
 
 ```text
@@ -434,7 +434,7 @@ End
   and stop.
 ```
 
-Task `reelbase-repair`: repository `reelbase`, Default environment, coordinator model Opus, no
+Task `reelbase-repair-v1`: repository `reelbase`, Default environment, coordinator model Opus, no
 connector. Its on/off switch stops repairs and leaves product work running.
 
 | Field | Value |
@@ -470,7 +470,7 @@ End
 - Touch no `prd`, `plan` or `ticket` issue.
 ```
 
-Task `reelbase-flag-off`: repository `reelbase`, trigger Issue Labeled with label `bug` and state
+Task `reelbase-flag-off-v1`: repository `reelbase`, trigger Issue Labeled with label `bug` and state
 open, LaunchDarkly connector.
 
 ```text
@@ -514,8 +514,8 @@ End
 - Change no code, open no pull request and close no issue.
 ```
 
-Task `reelbase-sentry-watch`: repository `reelbase`, hourly schedule, Sentry and LaunchDarkly
-connectors. Its `bug` issues also start `reelbase-flag-off`, which stops at their title.
+Task `reelbase-sentry-watch-v1`: repository `reelbase`, hourly schedule, Sentry and LaunchDarkly
+connectors. Its `bug` issues also start `reelbase-flag-off-v1`, which stops at their title.
 
 ```text
 You watch production errors for this repository, switch off the flag
@@ -583,7 +583,7 @@ Only facts a remaining step depends on.
 | The code owner rule passes when the PR's author is the code owner | #123, ruleset log result `pass` |
 | Hobby rolls back one deployment only; after a rollback new pushes do not go live until one is promoted | Vercel docs, instant rollback |
 | A cloud run starts in auto mode, which blocks "merging a pull request no human has approved" | Claude Code docs, scheduled tasks and permission modes |
-| An issue trigger can filter on Labels and State; the label started a run in 24 seconds | Task `reelbase-factory`, runs of 2026-11-15 for #143, #149 and #154 |
+| An issue trigger can filter on Labels and State; the label started a run in 24 seconds | Task `reelbase-factory-v1`, runs of 2026-11-15 for #143, #149 and #154 |
 | Events above the task's hourly cap are dropped | Claude Code docs, scheduled tasks, read 2026-11-15 |
 | A triggered run cannot start a skill marked `disable-model-invocation`; it can read and follow the skill's files | First run for #143 stopped; the second built #147 |
 | `smoke` closes a bot-merged PR's issues after the deploy, and opens a `bug` issue on a failure | #143 to #146 after #147; #142 |
@@ -595,7 +595,7 @@ Not yet proven:
 - A PRD with a new page, stored data or a parked ticket, started by the trigger. The three PRDs of
   Phase 4 were small filters and a header count.
 - A run can see which event started it. The plan does not depend on it.
-- The `bug` and `repair` trigger starts a `reelbase-repair` run, also when a cloud run adds the
+- The `bug` and `repair` trigger starts a `reelbase-repair-v1` run, also when a cloud run adds the
   label.
 - The hourly sweep turns a flag back on and closes a repaired bug.
 - What happens when a production build fails: Vercel sends no `success` event, so `smoke` does not
