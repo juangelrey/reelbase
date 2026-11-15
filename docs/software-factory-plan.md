@@ -203,7 +203,7 @@ list then, not before.
 | 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | Done 2026-11-15 (#161, task prompt). Scope [below](#phase-5-self-heal) |
 | 6 | Auto-revert: a broken merge is reverted on `main` | Dropped 2026-11-15. A flag turned off heals in seconds with no PR and no deploy, and the code stays on `main` |
 | 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
-| 8 | Flags: each user-visible feature ships behind a flag, and a failed smoke test turns it off | Started 2026-11-15, before Phase 7. Scope [below](#phase-8-flags) |
+| 8 | Flags: each user-visible feature ships behind a flag, and a failed smoke test turns it off | Built and switched on 2026-11-15, before Phase 7. Scope [below](#phase-8-flags) |
 | 9 | Widen: the one-way list shrinks | Metrics from many runs |
 
 - Phase 5 reverses a Phase 2 decision, that the run ends after it opens the PR. It does not wait
@@ -264,11 +264,14 @@ the next PRD shows it anyway.
    on unless the flag serves `false`, so a missing flag or an unreachable LaunchDarkly leaves the
    feature on. A feature calls it from its own code, so adding a flag is two-way.
 2. **Build rule:** a PRD names a flag key under `## Flag`. The run puts the change behind it,
-   creates the flag in LaunchDarkly project `reelbase` serving `true` in every environment,
+   creates the flag in LaunchDarkly project `reelbase`, turned on in every environment,
    through the task's LaunchDarkly connector, and names it in the PR body. Made by the advising
    session as an edit to `/as-spec` and `as-build`.
-3. **Automatic off:** when the smoke test fails, the flag named in the failing PR is turned off.
-   Not designed yet.
+3. **Automatic off, switched on by you on 2026-11-15:** a second cloud task, `reelbase-flag-off`
+   under [Cloud task](#cloud-task), starts on a `bug` issue. It turns off the flag named in the
+   failing PR and requests the home page. On a 200 it says so on the issue; otherwise it turns
+   the flag back on and leaves Instant Rollback to you. It changes no code and uses no new secret.
+   Not observed yet.
 
 **Limits:** the app has one visitor context, so a flag is on or off for everyone and there is no
 gradual rollout. Breakage outside the flagged code stays with you and Instant Rollback. Removing
@@ -364,6 +367,47 @@ End
   itself, and the issues close after the deploy.
 - If nothing could be built, comment the reason on the `prd` issue
   and stop.
+```
+
+Task `reelbase-flag-off`: repository `reelbase`, trigger Issue Labeled with label `bug` and state
+open, LaunchDarkly connector.
+
+```text
+You switch off the flag of a feature that broke production in this
+repository. Nobody is watching.
+
+Start
+- List the open issues labeled `bug` whose title starts with
+  `Smoke test failed for`. Leave out any that has a comment starting
+  with `Flag off:`. Take the newest.
+- If there is none, stop and change nothing.
+- If its title ends with `(run started by hand)`, comment
+  `Flag off: not done, the smoke run was started by hand.` and stop.
+
+Work
+- The issue names a pull request. Read that pull request's body and
+  find its `**Flag:**` line.
+- If the issue names no pull request, or the line is missing or says
+  none, comment `Flag off: not done, the pull request names no flag.`
+  and stop.
+- With the LaunchDarkly connector, in project `reelbase`, environment
+  `production`, make that flag serve `false`. If the flag does not
+  exist, create it as a boolean that serves `false` in `production`
+  and `true` in every other environment.
+- Change no other flag and no other environment.
+- Wait 30 seconds, then request https://reelbase-tau.vercel.app. If
+  the answer is not 200, wait 30 seconds and request it once more.
+
+End
+- On a 200, comment: `Flag off: <key> is off in production and the
+  home page answers 200. The fix is a new PRD.`
+- Otherwise make the flag serve `true` in `production` again and
+  comment: `Flag off: undone. The home page still answers <status>
+  with <key> off, so the flag was not the cause. Production is still
+  broken: use Instant Rollback in Vercel.`
+- If you could not change the flag or request the page, comment what
+  failed, starting with `Flag off:`.
+- Change no code, open no pull request and close no issue.
 ```
 
 ## Facts this plan rests on
