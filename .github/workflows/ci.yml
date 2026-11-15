@@ -1,3 +1,4 @@
+# Runs the checks that gate a merge into main.
 name: CI
 
 on:
