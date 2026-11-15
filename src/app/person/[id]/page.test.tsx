@@ -3,7 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import person from "@/lib/tmdb/fixtures/person-details.json";
 import sparse from "@/lib/tmdb/fixtures/person-details-sparse.json";
 import * as personPage from "./page";
-import PersonPage, { generateMetadata, revalidate } from "./page";
+import PersonPage, { generateMetadata } from "./page";
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -37,10 +37,10 @@ afterEach(() => {
 });
 
 describe("Person page", () => {
-  it("renders per request (it reads ?credits) and keeps TMDB responses cached for an hour", () => {
+  it("sets no route caching of its own: the layout renders it per request, and TMDB responses stay cached", () => {
     expect(personPage).not.toHaveProperty("generateStaticParams");
     expect(personPage).not.toHaveProperty("dynamicParams");
-    expect(revalidate).toBe(3600);
+    expect(personPage).not.toHaveProperty("revalidate");
   });
 
   it("renders the name and the h632 profile photo at the canonical URL", async () => {

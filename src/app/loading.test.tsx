@@ -8,6 +8,8 @@ import TitleLoading from "./title/[id]/loading";
 import ShowLoading from "./tv/[id]/loading";
 
 vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header>header</header> }));
+// The layout waits for a request before reading flags; a test has none.
+vi.mock("next/server", () => ({ connection: async () => {} }));
 
 describe("loading skeletons", () => {
   it.each([

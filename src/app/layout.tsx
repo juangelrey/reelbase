@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Anton } from "next/font/google";
+import { connection } from "next/server";
 import { ViewTransition, type ReactNode } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeSync } from "@/components/theme-toggle";
@@ -17,6 +18,9 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Renders every route per request, so turning a flag off in LaunchDarkly takes effect without a rebuild.
+  // TMDB responses still come from the fetch cache (src/lib/tmdb/client.ts).
+  await connection();
   const settingsPage = await isFlagOn("settings-page");
   return (
     // The inline script sets `data-theme` on <html> before first paint; React would otherwise flag that attribute.

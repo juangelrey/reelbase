@@ -9,10 +9,6 @@ interface PersonPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-// `?credits` makes this page dynamic: it renders per request (never at build time), and its TMDB
-// response stays in the fetch cache for an hour, so a repeat view makes no TMDB call.
-export const revalidate = 3600;
-
 /** Today's date as "YYYY-MM-DD" (UTC), which decides which films are upcoming. */
 function today(): string {
   return new Date().toISOString().slice(0, 10);

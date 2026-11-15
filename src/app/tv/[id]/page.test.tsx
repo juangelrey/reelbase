@@ -6,7 +6,7 @@ import sparse from "@/lib/tmdb/fixtures/tv-details-sparse.json";
 import tvSeason from "@/lib/tmdb/fixtures/tv-season.json";
 import { STORAGE_KEY } from "@/lib/watchlist/watchlist";
 import ShowPage, * as page from "./page";
-import { generateMetadata, revalidate } from "./page";
+import { generateMetadata } from "./page";
 
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
@@ -52,9 +52,9 @@ afterEach(() => {
 });
 
 describe("TV page", () => {
-  it("renders on demand, since ?season is read per request, and caches for an hour", () => {
+  it("sets no route caching of its own: the layout renders it per request, and TMDB responses stay cached", () => {
     expect(page).not.toHaveProperty("generateStaticParams");
-    expect(revalidate).toBe(3600);
+    expect(page).not.toHaveProperty("revalidate");
   });
 
   it("renders a TMDB show at its canonical URL with exactly one TMDB request", async () => {
