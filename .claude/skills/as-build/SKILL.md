@@ -26,17 +26,25 @@ Start from a clean working tree: if it has uncommitted changes, stop and ask the
 
 1. Create the branch per `.claude/skills/git-workflow-and-versioning/references/branch-naming.md`
 2. Install dependencies as the project's CI does
-3. Build the ticket's acceptance criteria with the as-test skill
+3. Build the ticket's acceptance criteria with the as-test skill, behind the PRD's flag when it names one (see Flag)
 4. Run the checks the project's CI runs; all pass
 5. Commit with a message per the git-workflow-and-versioning skill
 6. Spawn the `code-reviewer` agent on the diff against `main`, naming the ticket. If it returns REQUEST CHANGES, fix every Critical and Required finding, re-run step 4, commit, and spawn it once more. If it still returns REQUEST CHANGES, push the branch unless it already has an open PR, then stop and report the findings without opening a PR
-7. Push the branch and open a PR to `main`, using the PR body below
+7. Create the PRD's flag (see Flag), push the branch and open a PR to `main`, using the PR body below
 8. Stop. Leave the ticket open, because merging the PR closes it
+
+## Flag
+
+When the `prd` names a flag, everything it changes for a visitor sits behind `isFlagOn("<key>")` from `src/lib/flags/flags.ts`, called in server code, and with the flag off the app behaves as on `main`. Tests cover both states.
+
+Before opening the PR, create the flag through the LaunchDarkly connector, in project `reelbase`: boolean, with the PRD's key, serving `true` in every environment. In `auto` and `dark` the coordinator does this, not an implementer. A flag that serves `false` turns the feature off, and a missing flag leaves it on: if you cannot leave the flag serving `true` everywhere, leave no flag and say so in the PR body.
 
 ## PR body
 
 ```markdown
 Closes #N
+
+**Flag:** the PRD's flag key, or none
 
 ## Merge Danger
 
