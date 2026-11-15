@@ -327,6 +327,46 @@ describe("Home page decade", () => {
   });
 });
 
+describe("Home page runtime", () => {
+  it("sends the runtime to discover and keeps it in every link", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ runtime: "120", genre: "28", decade: "2010", rating: "7", sort: "release" });
+    const params = discoverUrl(fetchMock).searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("119");
+    const runtimes = screen.getByRole("navigation", { name: "Runtime" });
+    expect(within(runtimes).getByRole("link", { name: "Under 120 min" })).toHaveAttribute("aria-current", "true");
+    const sort = screen.getByRole("navigation", { name: "Sort" });
+    expect(within(sort).getByRole("link", { name: "Popular" })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120");
+    const media = screen.getByRole("navigation", { name: "Movies or TV" });
+    expect(within(media).getByRole("link", { name: "TV" })).toHaveAttribute("href", "/?type=tv&decade=2010&rating=7&runtime=120&sort=release");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&decade=2010&rating=7&runtime=120&sort=release&page=2");
+  });
+
+  it("sends the runtime for TV too", async () => {
+    const fetchMock = stubTmdb();
+    await renderHome({ type: "tv", runtime: "90" });
+    const params = discoverUrl(fetchMock, "tv").searchParams;
+    expect(params.get("with_runtime.gte")).toBe("1");
+    expect(params.get("with_runtime.lte")).toBe("89");
+  });
+
+  it.each(["60", "100", "90.5", "090", "abc", ""])("reads ?runtime=%j as Any: the same request and links as without it", async (runtime) => {
+    const without = stubTmdb();
+    await renderHome({ genre: "28", sort: "release" });
+    const expected = discoverUrl(without).search;
+    cleanup();
+    const withBad = stubTmdb();
+    await renderHome({ genre: "28", sort: "release", runtime });
+    expect(discoverUrl(withBad).search).toBe(expected);
+    const runtimes = screen.getByRole("navigation", { name: "Runtime" });
+    expect(within(runtimes).getByRole("link", { name: "Any" })).toHaveAttribute("aria-current", "true");
+    const pagination = screen.getByRole("navigation", { name: "Pagination" });
+    expect(within(pagination).getByRole("link", { name: /Next/ })).toHaveAttribute("href", "/?genre=28&sort=release&page=2");
+  });
+});
+
 describe("Home page rating clear filters", () => {
   it("shows Clear filters for ?rating=8 alone, without the rating in its href", async () => {
     stubTmdb();
