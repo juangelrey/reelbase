@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { notFound } from "next/navigation";
+import watchProviderRegions from "@/lib/tmdb/fixtures/watch-provider-regions.json";
 import { THEME_STORAGE_KEY } from "@/lib/theme/theme";
 import SettingsPage, { dynamic, generateMetadata } from "./page";
 
@@ -16,11 +17,42 @@ vi.mock("@/lib/flags/flags", () => ({
   isFlagOn: vi.fn(async (key: string) => flags.killSwitches[key] ?? true),
 }));
 
+/** What the visitor's request carries: the `reelbase-region` cookie and the `Accept-Language` header. */
+const request = vi.hoisted(() => ({ regionCookie: undefined as string | undefined, acceptLanguage: undefined as string | undefined }));
+
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({
+    get: (name: string) =>
+      name === "reelbase-region" && request.regionCookie !== undefined ? { name, value: request.regionCookie } : undefined,
+  })),
+  headers: vi.fn(async () => new Headers(request.acceptLanguage === undefined ? {} : { "accept-language": request.acceptLanguage })),
+}));
+
 beforeEach(() => {
+  vi.stubEnv("TMDB_READ_ACCESS_TOKEN", "test-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: URL | string) =>
+      new URL(String(input)).pathname === "/3/watch/providers/regions"
+        ? Response.json(watchProviderRegions)
+        : Response.json({}, { status: 404 }),
+    ),
+  );
   flags.killSwitches = {};
+  request.regionCookie = undefined;
+  request.acceptLanguage = undefined;
   localStorage.clear();
   vi.mocked(notFound).mockClear();
 });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+function regionSelect() {
+  return screen.getByRole("combobox", { name: "Region" }) as HTMLSelectElement;
+}
 
 describe("Settings page", () => {
   it("has the heading Settings and the document title Settings", async () => {
@@ -52,5 +84,42 @@ describe("Settings page", () => {
 
   it("renders per request, so turning the flag off takes effect without a rebuild", () => {
     expect(dynamic).toBe("force-dynamic");
+  });
+});
+
+describe("Settings page region", () => {
+  it("follows Theme with a Region section: TMDB's regions A-Z in a form to /region that returns here", async () => {
+    render(await SettingsPage());
+    const sections = screen.getAllByRole("region");
+    expect(sections[1]).toHaveAccessibleName("Region");
+    const form = within(sections[1]).getByRole("form", { name: "Region" });
+    expect(form).toHaveAttribute("action", "/region");
+    expect(form).toHaveAttribute("method", "get");
+    const options = within(form).getAllByRole("option").map((option) => option.textContent);
+    expect(options).toHaveLength(watchProviderRegions.results.length);
+    expect(options).toEqual([...options].sort((a, b) => a!.localeCompare(b!, "en")));
+    const hidden = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')).map(({ name, value }) => [name, value]);
+    expect(hidden).toEqual([["from", "settings"]]);
+    expect(within(form).getByRole("button", { name: "Apply" })).toHaveAttribute("type", "submit");
+  });
+
+  it("shows the saved region, including one saved before this change", async () => {
+    request.regionCookie = "GB";
+    request.acceptLanguage = "es-ES";
+    render(await SettingsPage());
+    expect(regionSelect().value).toBe("GB");
+  });
+
+  it("falls back to the browser language's country, then US", async () => {
+    request.acceptLanguage = "es-ES,es;q=0.9";
+    render(await SettingsPage());
+    expect(regionSelect().value).toBe("ES");
+  });
+
+  it("uses US when nothing names a listed region", async () => {
+    request.regionCookie = "ZZ";
+    request.acceptLanguage = "en-QQ";
+    render(await SettingsPage());
+    expect(regionSelect().value).toBe("US");
   });
 });

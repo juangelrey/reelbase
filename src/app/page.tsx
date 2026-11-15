@@ -73,11 +73,12 @@ export default async function Home({ searchParams }: HomeProps) {
   const [params, cookieStore, requestHeaders] = await Promise.all([searchParams, cookies(), headers()]);
   // Movie and TV genre ids differ, so the genre is checked against the list for the chosen kind.
   const kind = parseKind(params.type);
-  const [genres, regions, marquee, namesDecade] = await Promise.all([
+  const [genres, regions, marquee, namesDecade, settingsPage] = await Promise.all([
     listGenres(kind),
     listRegions(),
     isMarqueeHome(),
     isFlagOn("decade-empty-hint"),
+    isFlagOn("settings-page"),
   ]);
   const region = resolveRegion(
     {
@@ -123,8 +124,9 @@ export default async function Home({ searchParams }: HomeProps) {
       <BrowseControls genres={genres} state={state}>
         {marquee && mediaSwitch}
       </BrowseControls>
-      {/* Always shown; changing region keeps the other filters and returns to page 1 (via /region). */}
-      <RegionSelect regions={regions} state={state} />
+      {/* With flag `settings-page` on, the region is chosen on /settings; ?region= and the cookie still apply.
+          Off, it shows here; changing region keeps the other filters and returns to page 1 (via /region). */}
+      {!settingsPage && <RegionSelect regions={regions} state={state} />}
       {/* The region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
       <ProviderFilter providers={providers} state={state} />
       {marquee && lead ? (
