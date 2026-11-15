@@ -29,23 +29,21 @@ const PAGE_SIZE = 20;
 const BROWSE_KINDS = ["movie", "tv"] as const;
 
 /**
- * The empty grid's text, naming the filters in play: "No titles match these genres on this service. Try removing
- * one, or show all titles." With one filter it suggests another; with several, dropping one.
+ * The empty-grid text, naming the genre, service, rating and runtime filters in play ("rated 7+", "under 120 min").
+ * The hint suggests removing one when more than one of them is set, and trying another when only one is.
  */
-/**
- * The empty-grid text, naming the genre, service and rating filters in play ("rated 7+"). The hint suggests
- * removing one when more than one of them is set, and trying another when only one is.
- */
-function emptyMessage({ genres, providers, rating }: BrowseState, noun: string): string {
+function emptyMessage({ genres, providers, rating, runtime }: BrowseState, noun: string): string {
   const genrePart = genres.length === 0 ? "" : genres.length === 1 ? "this genre" : "these genres";
   const servicePart = providers.length === 0 ? "" : providers.length === 1 ? "this service" : "these services";
-  const subject = rating === undefined ? noun : `${noun} rated ${rating}+`;
-  const filterCount = genres.length + providers.length + (rating === undefined ? 0 : 1);
+  const ratingPart = rating === undefined ? "" : ` rated ${rating}+`;
+  const runtimePart = runtime === undefined ? "" : ` under ${runtime} min`;
+  const subject = `${noun}${ratingPart}${runtimePart}`;
+  const filterCount = genres.length + providers.length + (rating === undefined ? 0 : 1) + (runtime === undefined ? 0 : 1);
   const hint = `${filterCount > 1 ? "Try removing one" : "Try another one"}, or show all ${noun}.`;
   if (genrePart && servicePart) return `No ${subject} match ${genrePart} on ${servicePart}. ${hint}`;
   if (servicePart) return `No ${subject} stream on ${servicePart}. ${hint}`;
   if (genrePart) return `No ${subject} match ${genrePart}. ${hint}`;
-  if (rating !== undefined) return `No ${subject} to show. ${hint}`;
+  if (ratingPart || runtimePart) return `No ${subject} to show. ${hint}`;
   return `No ${noun} to show right now.`;
 }
 
