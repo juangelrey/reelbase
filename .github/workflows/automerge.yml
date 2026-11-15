@@ -1,0 +1,28 @@
+# Turns on GitHub's auto-merge for a PR from a `claude/` branch in this repository, so GitHub merges it once
+# every required check passes. A red check, such as `door` on a one-way PR, means it never merges by itself.
+name: automerge
+
+# `pull_request`, never `pull_request_target`; with the head repository condition below, a PR from a fork never runs it.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    name: automerge
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'claude/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No checkout: the job only calls the API, so none of the PR's code runs with this token.
+    steps:
+      - name: Turn on auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --merge "$PR_URL"

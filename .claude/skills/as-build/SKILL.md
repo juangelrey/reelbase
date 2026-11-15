@@ -1,6 +1,6 @@
 ---
 name: as-build
-description: 'Build tickets test-first and open a PR. No argument: next ticket. "auto": whole plan, you merge. "dark": whole plan in parallel, merged if two-way.'
+description: 'Build tickets test-first and open a PR. No argument: next ticket. "auto": whole plan. "dark": whole plan in parallel. A claude/ PR merges itself when its required checks are green, so a one-way PR waits for you; any other PR is yours to merge.'
 disable-model-invocation: true
 ---
 
@@ -8,9 +8,11 @@ disable-model-invocation: true
 
 | Mode | Builds | User approves | Ends with |
 |---|---|---|---|
-| `/as-build` | the next ready ticket | nothing up front | one PR for that ticket, which the user merges |
-| `/as-build auto` | the whole plan, written first if none exists, each ticket in a fresh `implementer` agent | the plan once, plus any blocker or high-risk ticket | one PR for the plan, which the user merges |
-| `/as-build dark` | same as `auto`, but ready tickets run in parallel, each in its own worktree | the plan once; parked tickets wait for the user | the same PR, merged by the `merger` agent if its door is two-way, otherwise left for the user |
+| `/as-build` | the next ready ticket | nothing up front | one PR for that ticket |
+| `/as-build auto` | the whole plan, written first if none exists, each ticket in a fresh `implementer` agent | the plan once, plus any blocker or high-risk ticket | one PR for the plan |
+| `/as-build dark` | same as `auto`, but ready tickets run in parallel, each in its own worktree | the plan once; parked tickets wait for the user | the same PR, and the run ends once it is open |
+
+A PR from a `claude/` branch merges itself when its required checks are green, so a one-way PR, which fails `door`, waits for the user. A PR from any other branch is merged by the user.
 
 `$ARGUMENTS` selects the mode: `auto` and `dark` follow `autonomous.md` in this folder, and empty or anything else runs Default.
 
