@@ -28,13 +28,12 @@ Ask the human clarifying questions until every template section below can be fil
 ## Testing Strategy
 [Which behaviour gets tests, at which level]
 
-## Boundaries
-- Always: [...]
-- Ask first: [...]
-- Never: [...]
+## Behaviour
+- [One specific, testable condition per line, each decided, none open; turn vague asks into measured targets]
 
-## Success Criteria
-[Specific, testable conditions; turn vague asks into measured targets]
+## Out of scope
+- [What is not built]
+- Paths outside [the paths this work may change]
 
 ## Open Questions
 [Anything unresolved that needs human input]
@@ -46,4 +45,4 @@ Ask the human clarifying questions until every template section below can be fil
 
 1. Summarize it and list any Open Questions.
 2. Ask the human to approve it or request changes.
-3. **End your turn.** Planning starts only after the human approves the spec in a later turn.
+3. **End your turn.** The `approved` label on the issue is the approval, and adding it starts the cloud build. The human adds it, or approves in a later turn with an unambiguous affirmative (e.g. "approve", "go", "yes"), and then you add it. A hedged response ("looks reasonable", "I guess") is not an approval.

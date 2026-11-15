@@ -20,7 +20,8 @@ argument-hint: "[PR number | base ref]"
 
 ### 1. Correctness
 
-- Matches the ticket's acceptance criteria and stays inside the `prd` boundaries.
+- Matches the ticket's acceptance criteria and every `prd` Behaviour line they come from, and builds nothing the `prd` lists under Out of scope.
+- A ticket criterion that narrows the Behaviour line it comes from is a Required finding: name the line.
 - Edge cases handled: null, empty, boundary values, upstream failures and empty results.
 - Error paths handled, not just the happy path.
 - No off-by-one errors, race conditions, or state inconsistencies.
@@ -59,7 +60,7 @@ When you flag a structural problem, propose the move:
 - Make a type boundary explicit so downstream branching disappears.
 - Delete a pass-through wrapper; extract a helper or split a large file.
 
-Prefer the remedy that removes moving pieces. Label a structural finding Required when the change makes structure worse.
+Prefer the remedy that removes moving pieces. A structural finding is Optional unless it makes a Behaviour line fail.
 
 ## Change Size
 
@@ -76,12 +77,12 @@ Every finding this change introduces carries exactly one label:
 | Label | Meaning |
 |---|---|
 | **Critical** | Security vulnerability, data loss, broken functionality, failing check |
-| **Required** | Missing test, surviving mutation, wrong abstraction, poor error handling, structure made worse |
-| **Optional** | A simpler design or useful refactor; the author's choice |
+| **Required** | A `prd` Behaviour line fails, has no test, or is narrowed by its ticket; or a fix would make a test more reliable: a surviving mutation, a race, a timing or order dependence |
+| **Optional** | Anything else worth changing: wrong abstraction, poor error handling, structure made worse, a simpler design, a useful refactor. Not fixed in this run |
 | **Nit** | Formatting, naming, style preference |
 | **FYI** | Context for later |
 
-Critical and Required findings are the must-fix set; each includes a specific fix. The verdict is **REQUEST CHANGES** while any remain, otherwise **APPROVE**.
+A finding is Required only for the reasons in the table; when unsure between Required and Optional, name the Behaviour line that fails, and if there is none it is Optional. Critical and Required findings are the must-fix set; each includes a specific fix. The verdict is **REQUEST CHANGES** while any remain, otherwise **APPROVE**.
 
 **Lead with what matters.** Order by leverage: correctness and security, then structural regressions and missed simplifications, then the rest. If you have one structural problem and ten nits, the structural problem is the review.
 

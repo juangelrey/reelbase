@@ -28,7 +28,10 @@
 6. **Park or stop.** An implementer reports BLOCKED when:
    - a test can't be made to pass or the build breaks without an obvious fix
    - the spec is ambiguous, or a task needs a decision the spec doesn't cover
+   - the ticket needs something the `prd` lists under Out of scope: it is parked, not widened
    - the ticket turns out high-risk and its brief carries no sign-off
+
+   A plumbing failure is not a ticket's blocker and not the run's to fix: when CI, a skill, a hook or a setting fails for a reason outside the tickets, change nothing to get past it. Stop the run and report what failed; in `dark`, as a comment on the `prd` issue.
 
    Before spawning each implementer, check whether its ticket is high-risk (defined under PR body in `SKILL.md`).
 
