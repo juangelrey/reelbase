@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import type { Provider } from "@/lib/catalog/providers";
 import { MyServices } from "./my-services";
@@ -17,6 +18,17 @@ function savedCookie() {
     .split("; ")
     .find((pair) => pair.startsWith("reelbase-services="))
     ?.slice("reelbase-services=".length);
+}
+
+/** Another tab, or a page restored by Back, saving `value` after this list rendered. */
+function saveElsewhere(value: string) {
+  document.cookie = `reelbase-services=${value}; Path=/`;
+}
+
+/** The list as the server renders it: `saved` read from the request's cookie, which the browser also holds. */
+function renderSaved(saved: number[], services = SERVICES) {
+  if (saved.length > 0) saveElsewhere(saved.join(","));
+  return render(<MyServices services={services} saved={saved} />);
 }
 
 afterEach(() => {
@@ -40,7 +52,7 @@ describe("MyServices", () => {
   });
 
   it("ticks the saved services", () => {
-    render(<MyServices services={SERVICES} saved={[337, 2000]} />);
+    renderSaved([337, 2000]);
     expect(screen.getByRole("checkbox", { name: "Disney Plus" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Netflix" })).not.toBeChecked();
   });
@@ -56,7 +68,7 @@ describe("MyServices", () => {
   });
 
   it("keeps saved services the region does not list when another is toggled", async () => {
-    render(<MyServices services={SERVICES} saved={[8, 2000]} />);
+    renderSaved([8, 2000]);
     await userEvent.click(screen.getByRole("checkbox", { name: "Disney Plus" }));
     expect(savedCookie()).toBe("8,337,2000");
     await userEvent.click(screen.getByRole("checkbox", { name: "Netflix" }));
@@ -65,9 +77,44 @@ describe("MyServices", () => {
   });
 
   it("clears the cookie when the last service is unticked", async () => {
-    render(<MyServices services={SERVICES} saved={[8]} />);
+    renderSaved([8]);
     await userEvent.click(screen.getByRole("checkbox", { name: "Netflix" }));
     expect(savedCookie()).toBeUndefined();
+  });
+
+  it("builds each write from the cookie as it is now, keeping services saved after the list rendered", async () => {
+    renderSaved([8]);
+    saveElsewhere("8,337,2000");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Max" }));
+    expect(savedCookie()).toBe("8,337,1899,2000");
+    expect(screen.getByRole("checkbox", { name: "Disney Plus" })).toBeChecked();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Netflix" }));
+    expect(savedCookie()).toBe("337,1899,2000");
+  });
+
+  it("ticks the services the cookie holds after mount, over a stale server read", () => {
+    saveElsewhere("337");
+    render(<MyServices services={SERVICES} saved={[8]} />);
+    expect(screen.getByRole("checkbox", { name: "Disney Plus" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Netflix" })).not.toBeChecked();
+  });
+
+  it("renders the server's read on the server", () => {
+    saveElsewhere("8");
+    const html = document.createElement("div");
+    html.innerHTML = renderToString(<MyServices services={SERVICES} saved={[337]} />);
+    const ticked = Array.from(html.querySelectorAll("input")).filter((box) => box.hasAttribute("checked"));
+    expect(ticked.map((box) => box.value)).toEqual(["337"]);
+  });
+
+  it("re-reads the cookie when the window regains focus", () => {
+    renderSaved([8]);
+    saveElsewhere("1899");
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(screen.getByRole("checkbox", { name: "Max" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Netflix" })).not.toBeChecked();
   });
 
   it("credits JustWatch with the list", () => {

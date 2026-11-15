@@ -805,13 +805,80 @@ describe("Home page saved services", () => {
     expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?genre=28&providers=any");
   });
 
-  it("shows unfiltered results when none of the saved services is in the top 12, and keeps providers=any in links", async () => {
+  it("shows unfiltered results when none of the saved services is in the top 12, and leaves providers out of browse links", async () => {
     const fetchMock = stubTmdb();
     request.servicesCookie = "149";
     await renderHome();
     expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
     expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("aria-current", "true");
-    expect(nextPageHref()).toBe("/?providers=any&page=2");
+    // Not a choice of no service: the next page resolves the saved services again, to the same results.
+    expect(nextPageHref()).toBe("/?page=2");
+    expect(within(screen.getByRole("navigation", { name: "Sort" })).getByRole("link", { name: "Top rated" })).toHaveAttribute("href", "/?sort=rating");
+    // Choosing Any service is that choice.
+    expect(within(services()).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?providers=any");
+  });
+
+  it("leaves providers out of paging and sort links while the saved services apply, and pills write ids", async () => {
+    stubTmdb();
+    request.servicesCookie = "8,337";
+    await renderHome({ genre: "28" });
+    expect(nextPageHref()).toBe("/?genre=28&page=2");
+    expect(within(screen.getByRole("navigation", { name: "Sort" })).getByRole("link", { name: "Top rated" })).toHaveAttribute(
+      "href",
+      "/?genre=28&sort=rating",
+    );
+    expect(within(services()).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?genre=28&providers=337");
+    expect(within(services()).getByRole("link", { name: "Hulu" })).toHaveAttribute("href", "/?genre=28&providers=8,15,337");
+  });
+
+  describe("switching kind with a saved service only in the other kind's top 12", () => {
+    // Movies list Netflix and Amazon Prime Video; TV lists them and Crunchyroll (283).
+    const movieTop = { results: watchProvidersMovie.results.filter(({ provider_id }) => provider_id === 8 || provider_id === 9) };
+    const netflix = watchProvidersTv.results.find(({ provider_id }) => provider_id === 8)!;
+    const tvTop = {
+      results: [...movieTop.results, { ...netflix, provider_id: 283, provider_name: "Crunchyroll", display_priorities: { US: 2 } }],
+    };
+    const bodies = { "/3/watch/providers/movie": movieTop, "/3/watch/providers/tv": tvTop };
+
+    function kindLink(name: "Movies" | "TV") {
+      return within(screen.getByRole("navigation", { name: "Movies or TV" })).getByRole("link", { name });
+    }
+
+    it("links TV without providers when some saved services are listed for movies, and TV applies them all", async () => {
+      const fetchMock = stubTmdb(discover, bodies);
+      request.servicesCookie = "8,283";
+      await renderHome();
+      expect(discoverUrl(fetchMock).searchParams.get("with_watch_providers")).toBe("8");
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv");
+      cleanup();
+      fetchMock.mockClear();
+      await renderHome({ type: "tv" });
+      expect(discoverUrl(fetchMock, "tv").searchParams.get("with_watch_providers")).toBe("8|283");
+      expect(kindLink("Movies")).toHaveAttribute("href", "/");
+    });
+
+    it("links TV without providers when no saved service is listed for movies, and TV applies it", async () => {
+      const fetchMock = stubTmdb(discover, bodies);
+      request.servicesCookie = "283";
+      await renderHome();
+      expect(discoverUrl(fetchMock).searchParams.has("with_watch_providers")).toBe(false);
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv");
+      cleanup();
+      fetchMock.mockClear();
+      await renderHome({ type: "tv" });
+      expect(discoverUrl(fetchMock, "tv").searchParams.get("with_watch_providers")).toBe("283");
+      expect(kindLink("Movies")).toHaveAttribute("href", "/");
+    });
+
+    it("keeps an explicit selection or providers=any across the switch", async () => {
+      stubTmdb(discover, bodies);
+      request.servicesCookie = "283";
+      await renderHome({ providers: "8" });
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv&providers=8");
+      cleanup();
+      await renderHome({ providers: "any" });
+      expect(kindLink("TV")).toHaveAttribute("href", "/?type=tv&providers=any");
+    });
   });
 
   it("lets a providers param with ids win over the saved services", async () => {

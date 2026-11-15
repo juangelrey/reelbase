@@ -77,7 +77,7 @@ describe("ProviderFilter", () => {
   });
 
   it("links Any service, and unselecting the last service, to providers=any while saved services exist", () => {
-    const nav = renderFilter({ providers: [8], hasSavedServices: true })!;
+    const nav = renderFilter({ providers: [8], providerSource: "saved" })!;
     expect(within(nav).getByRole("link", { name: "Any service" })).toHaveAttribute("href", "/?providers=any");
     expect(within(nav).getByRole("link", { name: "Netflix" })).toHaveAttribute("href", "/?providers=any");
     expect(within(nav).getByRole("link", { name: "Hulu" })).toHaveAttribute("href", "/?providers=8,15");

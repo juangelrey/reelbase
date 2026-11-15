@@ -60,7 +60,14 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  document.cookie = "reelbase-services=; Max-Age=0; Path=/";
 });
+
+/** Saved services as a reload sends them, and as the browser holds them for My services to re-read after mount. */
+function saveServices(value: string) {
+  request.servicesCookie = value;
+  document.cookie = `reelbase-services=${value}; Path=/`;
+}
 
 function regionSelect() {
   return screen.getByRole("combobox", { name: "Region" }) as HTMLSelectElement;
@@ -162,7 +169,7 @@ describe("Settings page My services", () => {
   });
 
   it("ticks the services saved in the cookie, so they show after a reload", async () => {
-    request.servicesCookie = "337,8";
+    saveServices("337,8");
     render(await SettingsPage());
     expect(checkedIds()).toEqual([8, 337]);
   });
@@ -175,7 +182,7 @@ describe("Settings page My services", () => {
 
   it("lists the services of the region that applies, and keeps saved ones it does not list hidden", async () => {
     request.regionCookie = "ES";
-    request.servicesCookie = "149,1899";
+    saveServices("149,1899");
     render(await SettingsPage());
     const boxes = within(myServices()).getAllByRole("checkbox");
     expect(boxes.map((box) => Number(box.getAttribute("value")))).toEqual([8, 9, 350, 149, 337, 300]);

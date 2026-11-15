@@ -1,12 +1,10 @@
 // No `server-only`: the Settings checkboxes write the cookie from the browser, and home reads it on the server.
+import { isIdPart } from "./id-list";
 
 /** The first-party cookie that remembers the streaming services the visitor subscribes to, as TMDB provider ids. */
 export const SERVICES_COOKIE = "reelbase-services";
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
-
-/** A provider id as the cookie holds it: plain decimal digits, no sign, no leading zero. */
-const PROVIDER_ID = /^[1-9]\d*$/;
 
 /** Ascending, each once. */
 function normalize(ids: readonly number[]): number[] {
@@ -22,7 +20,7 @@ export function parseSavedServices(value: string | undefined): number[] {
   return normalize(
     value
       .split(",")
-      .filter((entry) => PROVIDER_ID.test(entry))
+      .filter(isIdPart)
       .map(Number)
       .filter(Number.isSafeInteger),
   );
