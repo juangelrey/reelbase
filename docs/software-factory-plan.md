@@ -3,6 +3,8 @@
 Status on 2026-11-15: **the goal is reached.** The plan to make Reelbase's build pipeline run
 unattended: you approve a PRD, and the change reaches production with no further action from you.
 
+![The flow from an approved PRD to production, and from a bug back to a merged fix](factory-flow.svg)
+
 ## Goal and limit
 
 **Goal:** approving a PRD is your only action. Build, verify and ship run without you.
