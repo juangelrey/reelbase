@@ -30,3 +30,12 @@ export async function isMarqueeHome(): Promise<boolean> {
   const ld = await client();
   return ld ? ld.boolVariation("marquee-home", VISITOR, false) : false;
 }
+
+/**
+ * A kill switch: whether the feature behind flag `key` is on. On unless the flag serves `false`, so a missing
+ * flag, no SDK key or an unreachable LaunchDarkly leaves the feature on. Server code only.
+ */
+export async function isFlagOn(key: string): Promise<boolean> {
+  const ld = await client();
+  return ld ? ld.boolVariation(key, VISITOR, true) : true;
+}
