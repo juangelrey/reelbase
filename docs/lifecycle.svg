@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2600 1380" width="2600" height="1380" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+  <rect width="2600" height="1380" fill="#0b0b0b"/>
+
+  <!-- the loop -->
+  <g fill="none" stroke="#55555b" stroke-width="2.5">
+    <path d="M220 560 H1700"/>
+    <path d="M1700 980 H900"/>
+    <path d="M900 980 A210 210 0 0 1 900 560"/>
+  </g>
+
+  <!-- the bug path -->
+  <path d="M1700 560 A210 210 0 0 1 1700 980" fill="none" stroke="#ff1a1a" stroke-width="3"/>
+
+  <!-- direction arrows -->
+  <g fill="#b9b9bd">
+    <polygon points="480,551 498,560 480,569"/>
+    <polygon points="722,551 740,560 722,569"/>
+    <polygon points="1092,551 1110,560 1092,569"/>
+    <polygon points="1492,551 1510,560 1492,569"/>
+    <polygon points="1378,971 1360,980 1378,989"/>
+    <polygon points="1108,971 1090,980 1108,989"/>
+    <polygon points="993,971 975,980 993,989"/>
+    <polygon points="681,778 699,778 690,760"/>
+  </g>
+  <g fill="#ff1a1a">
+    <polygon points="1901,762 1919,762 1910,780"/>
+    <polygon points="1648,971 1630,980 1648,989"/>
+  </g>
+
+  <!-- leaders from the high labels -->
+  <g stroke="#55555b" stroke-width="2" stroke-dasharray="3 7" fill="none">
+    <path d="M220 330 V545"/>
+    <path d="M900 330 V545"/>
+    <path d="M1700 330 V545"/>
+  </g>
+
+  <!-- off the loop: healthy, flag off, waits for you -->
+  <g fill="none" stroke="#8a8a90" stroke-width="2" stroke-dasharray="10 8">
+    <path d="M1712 552 C1780 420 1880 300 1985 292"/>
+    <path d="M1714 556 C1800 530 1950 520 2028 520"/>
+    <path d="M2040 532 V850"/>
+    <path d="M1300 992 V1300 H2040 V910"/>
+  </g>
+  <g fill="#8a8a90">
+    <polygon points="2031,850 2049,850 2040,868"/>
+    <polygon points="2031,910 2049,910 2040,892"/>
+  </g>
+
+  <!-- nodes -->
+  <g fill="#f2f2f2">
+    <circle cx="220" cy="560" r="10"/>
+    <circle cx="560" cy="560" r="10"/>
+    <circle cx="900" cy="560" r="10"/>
+    <circle cx="1300" cy="560" r="10"/>
+    <circle cx="1700" cy="560" r="10"/>
+    <circle cx="1560" cy="980" r="10"/>
+    <circle cx="1300" cy="980" r="10"/>
+    <circle cx="1040" cy="980" r="10"/>
+  </g>
+  <g fill="#0b0b0b" stroke="#f2f2f2" stroke-width="2.5">
+    <circle cx="2040" cy="520" r="10"/>
+    <circle cx="2040" cy="880" r="10"/>
+  </g>
+
+  <!-- labels: adding one starts the next step -->
+  <g fill="#0b0b0b" stroke="#8a6d1c" stroke-width="2">
+    <rect x="323" y="542" width="134" height="36" rx="18"/>
+    <rect x="1827" y="510" width="94" height="36" rx="18"/>
+    <rect x="1394" y="962" width="72" height="36" rx="18"/>
+    <rect x="1116" y="962" width="108" height="36" rx="18"/>
+    <rect x="1953" y="672" width="174" height="36" rx="18"/>
+    <rect x="1613" y="1282" width="174" height="36" rx="18"/>
+    <rect x="120" y="1282" width="94" height="36" rx="18"/>
+  </g>
+  <g text-anchor="middle" font-size="22" fill="#e3b341" font-family="'Cascadia Mono', Consolas, monospace">
+    <text x="390" y="568">approved</text>
+    <text x="1874" y="536">smoke</text>
+    <text x="1430" y="988">bug</text>
+    <text x="1170" y="988">repair</text>
+    <text x="2040" y="698">needs-human</text>
+    <text x="1700" y="1308">needs-human</text>
+    <text x="167" y="1308">label</text>
+  </g>
+  <text x="232" y="1309" font-size="26" fill="#6c6c72">a label: adding it starts the next step</text>
+
+  <!-- step names -->
+  <g text-anchor="middle" font-size="30" fill="#a8a8ac">
+    <g font-size="34" font-weight="700" fill="#ffffff">
+      <text x="220" y="150">PRD</text>
+      <text x="560" y="330">Build</text>
+      <text x="900" y="150">Gates</text>
+      <text x="1300" y="330">Deploy</text>
+      <text x="1700" y="150">Detect</text>
+      <text x="1560" y="1050">Bug issue</text>
+      <text x="1300" y="730">Triage</text>
+      <text x="1040" y="1050">Repair</text>
+    </g>
+
+    <text x="220" y="205">you write it and</text>
+    <text x="220" y="258">label it approved</text>
+
+    <text x="560" y="385">plan, tickets, two reviews,</text>
+    <text x="560" y="438">one pull request</text>
+
+    <text x="900" y="205">CI, door, e2e on the preview</text>
+    <text x="900" y="258">a green PR merges itself</text>
+
+    <text x="1300" y="385">main goes live</text>
+    <text x="1300" y="438">in production</text>
+
+    <text x="1700" y="205">smoke test after each deploy</text>
+    <text x="1700" y="258">Sentry errors every hour</text>
+
+    <text x="1560" y="1105">a new Sentry error</text>
+    <text x="1560" y="1158">its flag switched off</text>
+
+    <text x="1300" y="783">writes the agreement for the repair</text>
+    <text x="1300" y="836">flags it for repair, or parks it</text>
+
+    <text x="1040" y="1105">only what triage flagged</text>
+    <text x="1040" y="1158">a failing test, the fix, one PR</text>
+    <text x="1040" y="1211">or parked: <tspan fill="#e3b341" font-size="24" font-family="'Cascadia Mono', Consolas, monospace">needs-human</tspan></text>
+
+    <!-- who does it -->
+    <g font-size="22" fill="#6c6c72" font-family="'Cascadia Mono', Consolas, monospace">
+      <text x="220" y="305">you</text>
+      <text x="560" y="485">reelbase-factory-v1</text>
+      <text x="900" y="305">GitHub Actions</text>
+      <text x="1300" y="485">Vercel</text>
+      <text x="1700" y="305">smoke.yml · sentry-watch-v1</text>
+      <text x="1560" y="1211">sentry-watch-v1 opens it</text>
+      <text x="1300" y="882">reelbase-triage-v1</text>
+      <text x="1040" y="1264">reelbase-repair-v1</text>
+    </g>
+  </g>
+
+  <!-- inside the bug path -->
+  <g text-anchor="end" font-size="30" fill="#a8a8ac">
+    <text x="1850" y="760" font-size="34" font-weight="700" fill="#ff1a1a">Bug</text>
+    <text x="1850" y="812">fixed forward,</text>
+    <text x="1850" y="865">never rolled back</text>
+  </g>
+
+  <g font-size="30" fill="#a8a8ac">
+    <g font-size="34" font-weight="700" fill="#b9b9bd">
+      <text x="2010" y="300">Healthy</text>
+      <text x="2075" y="532">Flag off</text>
+      <text x="2075" y="892">Waits for you</text>
+    </g>
+    <text x="2010" y="352">issues close: PRD done, bug fixed</text>
+
+    <text x="2075" y="584">when the smoke test fails</text>
+    <text x="2075" y="637">feature off, never repaired</text>
+    <text x="2145" y="699" font-size="22" fill="#6c6c72" font-family="'Cascadia Mono', Consolas, monospace">reelbase-flag-off-v1</text>
+
+    <text x="2075" y="944">a smoke failure, always</text>
+    <text x="2075" y="997">a bug triage cannot repair</text>
+    <text x="2075" y="1050">a failed repair</text>
+    <text x="2075" y="1103">an error that came back</text>
+    <text x="2075" y="1149" font-size="22" fill="#6c6c72" font-family="'Cascadia Mono', Consolas, monospace">nothing runs on it</text>
+  </g>
+</svg>

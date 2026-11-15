@@ -1,5 +1,5 @@
 # Smoke tests each finished Production deployment. On a pass it closes the issues that the deployed commit's
-# pull request closes, since a merge made by GITHUB_TOKEN leaves them open. On a failure it opens a `bug` issue
+# pull request closes, since a merge made by GITHUB_TOKEN leaves them open. On a failure it opens a `smoke` issue
 # and closes nothing. Started by hand with an address, it tests that address and closes nothing whatever the result.
 name: smoke
 
@@ -114,8 +114,8 @@ jobs:
           done
 
       # On any failure, including a run started by hand. It also runs when the lookup step failed, and says so.
-      # The `bug` label is applied only when it exists, never created.
-      - name: Open a bug issue
+      # The `smoke` label is applied only when it exists, never created.
+      - name: Open a smoke issue
         if: ${{ !cancelled() && steps.check.outputs.passed != 'true' }}
         env:
           FIRST: ${{ steps.check.outputs.first }}
@@ -152,7 +152,7 @@ jobs:
             "" \
             "No issue was closed.")
           labels=()
-          if gh api "repos/$GITHUB_REPOSITORY/labels/bug" --silent; then labels=(-f 'labels[]=bug'); fi
+          if gh api "repos/$GITHUB_REPOSITORY/labels/smoke" --silent; then labels=(-f 'labels[]=smoke'); fi
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues" -f title="$title" -f body="$body" "${labels[@]}" \
             --jq '"Opened " + .html_url'
 
