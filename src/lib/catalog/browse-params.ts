@@ -165,12 +165,15 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   return search ? `/?${search}` : "/";
 }
 
-/** Whether the state applies a genre, a service or a decade: what "Clear filters" removes. */
-export function hasFilters({ genres, providers, decade }: BrowseState): boolean {
-  return genres.length > 0 || providers.length > 0 || decade !== undefined;
+/** Whether the state applies a genre, a service, a decade or a rating: what "Clear filters" removes. */
+export function hasFilters({ genres, providers, decade, rating }: BrowseState): boolean {
+  return genres.length > 0 || providers.length > 0 || decade !== undefined || rating !== undefined;
 }
 
-/** The home page URL without genres, services or decade, from page 1; `type`, `sort` and `region` follow `browseHref`. */
+/**
+ * The home page URL without genres, services, decade or rating, from page 1; `type`, `sort` and `region` follow
+ * `browseHref`.
+ */
 export function clearFiltersHref(state: BrowseState): string {
-  return browseHref({ ...state, genres: [], providers: [], decade: undefined, page: 1 });
+  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, page: 1 });
 }
