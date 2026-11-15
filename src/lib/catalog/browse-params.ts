@@ -14,6 +14,11 @@ export const DECADES = [2020, 2010, 2000, 1990, 1980, 1970] as const;
 
 export type Decade = (typeof DECADES)[number];
 
+/** The minimum TMDB average votes a browse can ask for, lowest first (`rating=7` is 7 and above). */
+export const RATINGS = [6, 7, 8] as const;
+
+export type Rating = (typeof RATINGS)[number];
+
 export interface BrowseState {
   /** Movies or TV series; `type=tv` in the URL, movies when absent. */
   kind: TitleKind;
@@ -42,6 +47,11 @@ export interface BrowseState {
    * `decade=2010` in the URL. Optional so a state without it reads as All.
    */
   decade?: Decade;
+  /**
+   * The minimum TMDB average vote, no rounding; absent for Any. `rating=7` in the URL. Optional so a state
+   * without it reads as Any.
+   */
+  rating?: Rating;
 }
 
 export function firstParam(value: SearchParamValue): string | undefined {
@@ -99,6 +109,12 @@ function parseDecade(value: SearchParamValue): Decade | undefined {
   return DECADES.find((decade) => String(decade) === raw);
 }
 
+/** A listed rating, e.g. "7"; anything else (`5`, `7.5`, `07`, empty) reads as Any. */
+function parseRating(value: SearchParamValue): Rating | undefined {
+  const raw = firstParam(value);
+  return RATINGS.find((rating) => String(rating) === raw);
+}
+
 const NO_PROVIDERS: ReadonlySet<number> = new Set();
 
 /**
@@ -126,20 +142,22 @@ export function parseBrowseParams(
     regionFromUrl: firstParam(params.region) === region,
     providers: parseProviders(params.providers, listedProviderIds),
     decade: parseDecade(params.decade),
+    rating: parseRating(params.rating),
   };
 }
 
 /**
  * A home page URL. `type` is set only for TV, so movie links stay as they were before TV browse, `decade`
- * only when one is set, and `region` only when it came from the URL. List separators stay literal commas (`genre=28,35`,
- * `providers=8,337`), not `%2C`, so links read as the spec writes them.
+ * and `rating` only when one is set, and `region` only when it came from the URL. List separators stay literal commas
+ * (`genre=28,35`, `providers=8,337`), not `%2C`, so links read as the spec writes them.
  */
-export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade }: BrowseState): string {
+export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating }: BrowseState): string {
   const query = new URLSearchParams();
   if (kind === "tv") query.set("type", "tv");
   if (genres.length > 0) query.set("genre", genres.join(","));
   if (providers.length > 0) query.set("providers", providers.join(","));
   if (decade !== undefined) query.set("decade", String(decade));
+  if (rating !== undefined) query.set("rating", String(rating));
   if (regionFromUrl) query.set("region", region);
   if (sort !== DEFAULT_SORT) query.set("sort", sort);
   if (page > 1) query.set("page", String(page));
@@ -147,12 +165,15 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   return search ? `/?${search}` : "/";
 }
 
-/** Whether the state applies a genre, a service or a decade: what "Clear filters" removes. */
-export function hasFilters({ genres, providers, decade }: BrowseState): boolean {
-  return genres.length > 0 || providers.length > 0 || decade !== undefined;
+/** Whether the state applies a genre, a service, a decade or a rating: what "Clear filters" removes. */
+export function hasFilters({ genres, providers, decade, rating }: BrowseState): boolean {
+  return genres.length > 0 || providers.length > 0 || decade !== undefined || rating !== undefined;
 }
 
-/** The home page URL without genres, services or decade, from page 1; `type`, `sort` and `region` follow `browseHref`. */
+/**
+ * The home page URL without genres, services, decade or rating, from page 1; `type`, `sort` and `region` follow
+ * `browseHref`.
+ */
 export function clearFiltersHref(state: BrowseState): string {
-  return browseHref({ ...state, genres: [], providers: [], decade: undefined, page: 1 });
+  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, page: 1 });
 }

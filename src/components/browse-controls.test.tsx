@@ -73,6 +73,17 @@ describe("BrowseControls decade pills", () => {
   });
 });
 
+describe("BrowseControls rating pills", () => {
+  it("shows the rating row under the decade row, with the selected rating current", () => {
+    renderControls({ rating: 7 });
+    const decades = screen.getByRole("navigation", { name: "Decade" });
+    const nav = screen.getByRole("navigation", { name: "Rating" });
+    expect(decades.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "7+" })).toHaveAttribute("aria-current", "true");
+    expect(within(nav).getByRole("link", { name: "Any" })).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("BrowseControls clear filters link", () => {
   it("shows one link to clear a selected genre", () => {
     renderControls({ genres: [28] });
@@ -89,7 +100,14 @@ describe("BrowseControls clear filters link", () => {
     expect(screen.getAllByRole("link", { name: "Clear filters" })).toHaveLength(1);
   });
 
-  it("is not shown without a genre, service or decade", () => {
+  it("shows one link to clear a selected rating alone, without the rating in its href", () => {
+    renderControls({ rating: 8 });
+    const links = screen.getAllByRole("link", { name: "Clear filters" });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/");
+  });
+
+  it("is not shown without a genre, service, decade or rating", () => {
     renderControls({ kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 });
     expect(screen.queryByRole("link", { name: "Clear filters" })).not.toBeInTheDocument();
   });

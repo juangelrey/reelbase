@@ -327,6 +327,20 @@ describe("Home page decade", () => {
   });
 });
 
+describe("Home page rating clear filters", () => {
+  it("shows Clear filters for ?rating=8 alone, without the rating in its href", async () => {
+    stubTmdb();
+    await renderHome({ rating: "8" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/");
+  });
+
+  it("keeps type, sort and a URL region when it clears the rating", async () => {
+    stubTmdb();
+    await renderHome({ type: "tv", rating: "7", region: "ES", sort: "rating" });
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/?type=tv&region=ES&sort=rating");
+  });
+});
+
 describe("Home page region", () => {
   it("lets ?region= beat the cookie and keeps it in links", async () => {
     stubTmdb();
@@ -532,6 +546,12 @@ describe("Home page streaming services", () => {
     [{ type: "tv", genre: "18", providers: "8,9" }, "No series match this genre on these services. Try removing one, or show all series."],
     [{}, "No titles to show right now."],
     [{ type: "tv" }, "No series to show right now."],
+    [{ rating: "7" }, "No titles rated 7+ to show. Try another one, or show all titles."],
+    [{ type: "tv", rating: "8" }, "No series rated 8+ to show. Try another one, or show all series."],
+    [{ genre: "28", rating: "7" }, "No titles rated 7+ match this genre. Try removing one, or show all titles."],
+    [{ providers: "8", rating: "6" }, "No titles rated 6+ stream on this service. Try removing one, or show all titles."],
+    [{ genre: "28", providers: "8", rating: "7" }, "No titles rated 7+ match this genre on this service. Try removing one, or show all titles."],
+    [{ rating: "7.5" }, "No titles to show right now."],
   ])("names the active filters when nothing matches %o", async (params, message) => {
     stubTmdb({ page: 1, results: [], total_pages: 0, total_results: 0 }, { "/3/discover/tv": { page: 1, results: [], total_pages: 0, total_results: 0 } });
     await renderHome(params);

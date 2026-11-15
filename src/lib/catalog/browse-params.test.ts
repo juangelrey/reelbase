@@ -1,6 +1,7 @@
 import {
   DECADES,
   DEFAULT_SORT,
+  RATINGS,
   browseHref,
   clearFiltersHref,
   hasFilters,
@@ -292,6 +293,51 @@ describe("browseHref decade", () => {
   });
 });
 
+describe("parseBrowseParams rating", () => {
+  it("lists the minimum ratings lowest first", () => {
+    expect(RATINGS).toEqual([6, 7, 8]);
+  });
+
+  it.each([6, 7, 8])("reads rating=%i", (rating) => {
+    expect(parseBrowseParams({ rating: String(rating) }, known, "US").rating).toBe(rating);
+  });
+
+  it("reads Any when the param is absent", () => {
+    expect(parseBrowseParams({}, known, "US").rating).toBeUndefined();
+  });
+
+  it.each(["", "5", "9", "7.5", "abc", " 7", "07", "7.0", "6+"])("reads rating=%j as Any", (rating) => {
+    expect(parseBrowseParams({ rating }, known, "US").rating).toBeUndefined();
+  });
+
+  it("uses the first value when the param repeats", () => {
+    expect(parseBrowseParams({ rating: ["8", "6"] }, known, "US").rating).toBe(8);
+    expect(parseBrowseParams({ rating: ["5", "7"] }, known, "US").rating).toBeUndefined();
+  });
+});
+
+describe("browseHref rating", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes rating=<n> only for a set rating", () => {
+    expect(browseHref({ ...base, rating: 7 })).toBe("/?rating=7");
+    expect(browseHref({ ...base, rating: undefined })).toBe("/");
+    expect(browseHref(base)).toBe("/");
+  });
+
+  it("writes the rating after the decade, alongside every other param", () => {
+    expect(
+      browseHref({ ...base, kind: "tv", genres: [18], providers: [8], decade: 1990, rating: 8, region: "ES", regionFromUrl: true, sort: "release", page: 2 }),
+    ).toBe("/?type=tv&genre=18&providers=8&decade=1990&rating=8&region=ES&sort=release&page=2");
+  });
+
+  it("round-trips a rating with genres, services, decade and sort", () => {
+    const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, rating: 6 as const, sort: "rating" as const, page: 3 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
+  });
+});
+
 describe("clearFiltersHref", () => {
   const filtered = { kind: "tv" as const, genres: [18], providers: [8], decade: 2010 as const, region: "ES", regionFromUrl: true, sort: "rating" as const, page: 3 };
 
@@ -306,6 +352,11 @@ describe("clearFiltersHref", () => {
   it("is the bare home page when nothing else remains", () => {
     expect(clearFiltersHref({ ...filtered, kind: "movie", sort: "popularity", regionFromUrl: false })).toBe("/");
   });
+
+  it("drops the rating too", () => {
+    expect(clearFiltersHref({ ...filtered, rating: 8 })).toBe("/?type=tv&region=ES&sort=rating");
+    expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, rating: 7 })).toBe("/?type=tv&region=ES&sort=rating");
+  });
 });
 
 describe("hasFilters", () => {
@@ -317,13 +368,18 @@ describe("hasFilters", () => {
     expect(hasFilters({ ...base, decade: 2010 })).toBe(true);
   });
 
+  it("is true with a rating alone", () => {
+    expect(hasFilters({ ...base, rating: 6 })).toBe(true);
+    expect(hasFilters(parseBrowseParams({ rating: "8" }, known, "US"))).toBe(true);
+  });
+
   it("is false with none of them, whatever the type, sort, region or page", () => {
     expect(hasFilters(base)).toBe(false);
     expect(hasFilters({ ...base, kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 })).toBe(false);
   });
 
   it("is false for raw filter params the parse drops", () => {
-    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8" }, known, "US"))).toBe(false);
+    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5" }, known, "US"))).toBe(false);
   });
 });
 
