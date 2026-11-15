@@ -144,9 +144,6 @@ why the production smoke test can be thin.
 Filter rows must all match. The values inside one row are alternatives, so the two labels are two
 rows. The task has no schedule. Its on/off switch is the kill switch.
 
-[Phase 7](#phase-7-repair) adds one value to each label row: `repair` beside `approved`, and `bug`
-beside `prd`.
-
 **What the plan needs from it:**
 
 1. A run starts when a `prd` issue gets the `approved` label. Observed: 24 seconds after the label
@@ -300,7 +297,7 @@ never waits for an open or parked PRD. The factory fixes forward and never rolls
 flag. A flag only decides whether production is healthy while the fix is built. Without one,
 production stays broken until the fix deploys, about 20 minutes: accepted by you on 2026-11-15.
 
-**Scope, one PR made by the advising session, and three settings of yours:**
+**Scope, one PR made by the advising session, one new task and two prompts of yours:**
 
 1. `.claude/skills/as-build/repair.md`, a new mode of `as-build`: one `bug` issue labeled
    `repair`, one implementer, one review, one PR that says `Repairs #N`. The run claims the bug
@@ -308,8 +305,9 @@ production stays broken until the fix deploys, about 20 minutes: accepted by you
 2. The same file's last section, After the merge: once the fix is deployed, the flag is turned
    back on, and a later run closes the bug when the home page answers 200 and Sentry is quiet.
 3. `as-build` never creates a flag or changes one's state in `repair`.
-4. `reelbase-factory` also starts on an open issue labeled `bug` and `repair`, and its prompt
-   takes an unclaimed bug before the approved PRD.
+4. A fourth cloud task, `reelbase-repair` under [Cloud task](#cloud-task), starts on an open
+   issue labeled `bug` and `repair`. `reelbase-factory` is unchanged, so a repair can never take
+   the run of a PRD.
 5. `reelbase-flag-off` and `reelbase-sentry-watch` add `repair` to a bug that names its pull
    request. `reelbase-sentry-watch` follows After the merge in every hourly run.
 6. Text from Sentry never reaches the builder: the watch copies only the error's type and its
@@ -330,8 +328,8 @@ added and the reason is commented. A parked bug gets no second attempt.
 - After an Instant Rollback the merged fix is not live until you promote it, and the sweep tests
   the old version.
 - A feature returns up to two hourly runs after its fix deploys.
-- Any label added later to an open `bug` and `repair` issue starts a run. The claim comment makes
-  it go on to the PRD check, as a label on an approved PRD does today.
+- Any label added later to an open `bug` and `repair` issue starts a `reelbase-repair` run. The
+  claim comment makes it stop.
 
 **Not in this phase:** triage, which is a step that reads a `bug` with no pull request to blame
 (an old error, an outage of TMDB, noise) and labels it `repair` or `needs-human`, or closes it; a
@@ -407,40 +405,25 @@ deployments, and previews need it, so it stays a repository secret.
 ## Cloud task
 
 Task `reelbase-factory`: repository `reelbase`, Default environment, coordinator model Opus,
-LaunchDarkly connector. Trigger Issue Labeled, with rows Labels one of `approved`, `repair`;
-Labels one of `prd`, `bug`; State `open`.
+LaunchDarkly connector. Trigger as under [Phase 4](#phase-4-start-done).
 
 ```text
-You build work for this repository: the repair of a production bug,
-or the open, approved PRD. Nobody is watching.
+You build the open, approved PRD of this repository. Nobody is watching.
 
 Start
-- List the open issues labeled both `bug` and `repair`. Leave out any
-  labeled `needs-human` and any with a comment starting with
-  `Repair: started`. If one is left, take the oldest and do Repair.
-- Otherwise find the open issue labeled both `prd` and `approved`.
-  If there is exactly one, do PRD.
-- Otherwise stop and change nothing.
+- Find the open issue labeled both `prd` and `approved`.
+- If there is none, or more than one, stop and change nothing.
 
-Repair
+Work
 - Read `.claude/skills/as-build/SKILL.md` and
-  `.claude/skills/as-build/repair.md`, and follow `repair.md` from
-  step 1 for that issue.
+  `.claude/skills/as-build/autonomous.md`, and follow their `dark` mode
+  from step 1.
 - Do not use the Skill tool for this: the skill is marked for manual
   invocation, and this prompt is that invocation, written by me.
-- The `repair` label is my approval: do not wait for one.
-- Where the skill says to stop and ask, park the bug as `repair.md`
-  says.
-- Do not merge and do not close the issue: the pull request merges
-  itself, and the bug is closed after the fix is live.
-
-PRD
-- Read `.claude/skills/as-build/SKILL.md` and
-  `.claude/skills/as-build/autonomous.md`, and follow their `dark`
-  mode from step 1.
-- Do not use the Skill tool for this, for the same reason.
 - My `approved` label covers the plan: do not wait for an approval.
 - Where the skill says to stop and ask, park the ticket instead.
+
+End
 - When the pull request is open, comment on the `prd` issue with a
   link to it and a summary.
 - Then follow step 8 of `autonomous.md`: keep the watch on the pull
@@ -449,6 +432,42 @@ PRD
   itself, and the issues close after the deploy.
 - If nothing could be built, comment the reason on the `prd` issue
   and stop.
+```
+
+Task `reelbase-repair`: repository `reelbase`, Default environment, coordinator model Opus, no
+connector. Its on/off switch stops repairs and leaves product work running.
+
+| Field | Value |
+|---|---|
+| Event | Issue: Labeled |
+| Filter | Labels · is one of · `repair` |
+| Filter | Labels · is one of · `bug` |
+| Filter | State · is one of · `open` |
+
+```text
+You repair one production bug of this repository. Nobody is watching.
+
+Start
+- List the open issues labeled both `bug` and `repair`. Leave out any
+  labeled `needs-human` and any with a comment starting with
+  `Repair: started`. Take the oldest.
+- If there is none, stop and change nothing.
+
+Work
+- Read `.claude/skills/as-build/SKILL.md` and
+  `.claude/skills/as-build/repair.md`, and follow `repair.md` from
+  step 1 for that issue.
+- Do not use the Skill tool for this: the skill is marked for manual
+  invocation, and this prompt is that invocation, written by me.
+- The `repair` label is my approval: do not wait for one.
+- Where the skill says to stop and ask, park the bug as `repair.md`
+  says.
+
+End
+- Build that one bug only. Any other has its own run.
+- Do not merge and do not close the issue: the pull request merges
+  itself, and the bug is closed after the fix is live.
+- Touch no `prd`, `plan` or `ticket` issue.
 ```
 
 Task `reelbase-flag-off`: repository `reelbase`, trigger Issue Labeled with label `bug` and state
@@ -576,8 +595,8 @@ Not yet proven:
 - A PRD with a new page, stored data or a parked ticket, started by the trigger. The three PRDs of
   Phase 4 were small filters and a header count.
 - A run can see which event started it. The plan does not depend on it.
-- The `bug` and `repair` trigger row starts a `reelbase-factory` run, also when a cloud run adds
-  the label.
+- The `bug` and `repair` trigger starts a `reelbase-repair` run, also when a cloud run adds the
+  label.
 - The hourly sweep turns a flag back on and closes a repaired bug.
 - What happens when a production build fails: Vercel sends no `success` event, so `smoke` does not
   run and no `bug` issue opens. The PRD's issues stay open.
