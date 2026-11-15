@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { MyServices } from "@/components/my-services";
 import { RegionSelect } from "@/components/region-select";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { listStreamingServices } from "@/lib/catalog/providers";
 import { REGION_COOKIE, listRegions, resolveRegion } from "@/lib/catalog/regions";
+import { SERVICES_COOKIE, parseSavedServices } from "@/lib/catalog/saved-services";
 import { isFlagOn } from "@/lib/flags/flags";
 
 // Per request, never at build time: a static page would keep the flag's build-time value until the next deploy.
@@ -31,6 +34,8 @@ export default async function SettingsPage() {
     },
     regions.map(({ code }) => code),
   );
+  const services = await listStreamingServices(region);
+  const saved = parseSavedServices(cookieStore.get(SERVICES_COOKIE)?.value);
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Settings</h1>
@@ -46,6 +51,13 @@ export default async function SettingsPage() {
         </h2>
         {/* Saves through /region, which returns here showing the new region. */}
         <RegionSelect regions={regions} region={region} from="settings" />
+      </section>
+      <section aria-labelledby="settings-services" className="space-y-3">
+        <h2 id="settings-services" className="text-lg font-semibold">
+          My services
+        </h2>
+        {/* Saved ids this region does not list are passed too, so a toggle here keeps them. */}
+        <MyServices services={services} saved={saved} />
       </section>
     </div>
   );

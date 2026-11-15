@@ -57,3 +57,13 @@ export async function listProviders(kind: TitleKind, region: string): Promise<Pr
     .slice(0, PROVIDER_LIMIT)
     .map(({ provider }) => ({ id: provider.provider_id, name: provider.provider_name, logoUrl: logoUrl(provider.logo_path, LOGO_SIZE) }));
 }
+
+/**
+ * The region's streaming services across kinds, as My services lists them: the movie top {@link PROVIDER_LIMIT},
+ * then any of the TV top {@link PROVIDER_LIMIT} not already listed, each once.
+ */
+export async function listStreamingServices(region: string): Promise<Provider[]> {
+  const [movie, tv] = await Promise.all([listProviders("movie", region), listProviders("tv", region)]);
+  const listed = new Set(movie.map(({ id }) => id));
+  return [...movie, ...tv.filter(({ id }) => !listed.has(id))];
+}

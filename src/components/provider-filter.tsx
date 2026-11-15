@@ -14,7 +14,8 @@ interface ProviderFilterProps {
   state: BrowseState;
 }
 
-function ProviderLogo({ provider }: { provider: Provider }) {
+/** The service's logo at a fixed size, or a placeholder of that size when TMDB has none. */
+export function ProviderLogo({ provider }: { provider: Provider }) {
   if (!provider.logoUrl) {
     // Keeps the pill's height and layout; the name beside it already says which service it is.
     return <span aria-hidden className="inline-block rounded bg-zinc-800" style={{ width: LOGO_PX, height: LOGO_PX }} />;
@@ -56,14 +57,21 @@ export function ProviderFilter({ providers, state }: ProviderFilterProps) {
           ))}
         </ul>
       </nav>
-      <p className="text-xs text-zinc-400">
-        <a
-          href={JUSTWATCH_URL}
-          className="underline hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
-        >
-          Streaming data by JustWatch
-        </a>
-      </p>
+      <JustWatchCredit />
     </div>
+  );
+}
+
+/** The credit TMDB's terms require wherever its provider data shows. */
+export function JustWatchCredit() {
+  return (
+    <p className="text-xs text-zinc-400">
+      <a
+        href={JUSTWATCH_URL}
+        className="underline hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+      >
+        Streaming data by JustWatch
+      </a>
+    </p>
   );
 }
