@@ -610,3 +610,58 @@ describe("withProviders", () => {
     expect(withProviders({ ...base, providers: [8] }, [])).toEqual(base);
   });
 });
+
+describe("services from Settings only", () => {
+  // Some of the US top 12 for movies: Netflix, Amazon Prime Video, Disney Plus, Hulu.
+  const listed = new Set([8, 9, 337, 15]);
+
+  function parse(params: Record<string, string>, saved: number[]) {
+    return parseBrowseParams(params, known, "US", listed, saved, true);
+  }
+
+  it("applies the saved services the top 12 lists, from the settings source", () => {
+    // 149 (Movistar Plus+) is saved from Spain and not in the US top 12.
+    expect(parse({}, [8, 149, 337])).toMatchObject({ providers: [8, 337], providerSource: "settings" });
+  });
+
+  it("applies no service with nothing saved, or none of the saved services in the top 12", () => {
+    expect(parse({}, [])).toMatchObject({ providers: [], providerSource: "settings" });
+    expect(parse({}, [149])).toMatchObject({ providers: [], providerSource: "settings" });
+  });
+
+  it.each(["9", "any", "8,15"])("ignores providers=%s, applying the saved services as if it were absent", (providers) => {
+    expect(parse({ providers }, [8, 337])).toEqual(parse({}, [8, 337]));
+    expect(parse({ providers }, [])).toEqual(parse({}, []));
+  });
+
+  it("never writes providers in a browse link, whatever the services", () => {
+    const state = parse({ genre: "28", sort: "rating", page: "2" }, [8, 337]);
+    expect(browseHref(state)).toBe("/?genre=28&sort=rating&page=2");
+    expect(browseHref({ ...state, kind: "tv", genres: [], page: 1 })).toBe("/?type=tv&sort=rating");
+    expect(browseHref(parse({}, []))).toBe("/");
+  });
+
+  it("keeps the services through withProviders, which writes no providers either", () => {
+    const state = parse({ genre: "28" }, [8]);
+    expect(withProviders(state, [])).toEqual(state);
+    expect(withProviders(state, [9, 15])).toEqual(state);
+    expect(browseHref(withProviders(state, [9]))).toBe("/?genre=28");
+  });
+
+  it("clears filters without touching the services or writing providers", () => {
+    expect(clearFiltersHref(parse({ genre: "28", decade: "2010", sort: "title" }, [8, 337]))).toBe("/?sort=title");
+    expect(clearFiltersHref(parse({ rating: "7" }, []))).toBe("/");
+  });
+
+  it("does not count the services as a filter", () => {
+    expect(hasFilters(parse({}, [8, 337]))).toBe(false);
+    expect(hasFilters(parse({ language: "es" }, [8]))).toBe(true);
+    expect(hasFilters(parse({ genre: "28" }, []))).toBe(true);
+  });
+
+  it("round-trips a state, resolving the same saved services again", () => {
+    const state = parse({ genre: "28", sort: "title", page: "2" }, [8]);
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parse(query, [8])).toEqual(state);
+  });
+});
