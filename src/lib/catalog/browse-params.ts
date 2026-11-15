@@ -24,6 +24,20 @@ export const RUNTIMES = [90, 120, 150] as const;
 
 export type Runtime = (typeof RUNTIMES)[number];
 
+/** The original languages a browse can ask for, as TMDB's ISO 639-1 codes, in pill order. */
+export const LANGUAGES = ["en", "es", "fr", "ja", "ko"] as const;
+
+export type Language = (typeof LANGUAGES)[number];
+
+/** Each browse language's English name, for its pill and the empty-grid text. */
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  ja: "Japanese",
+  ko: "Korean",
+};
+
 export interface BrowseState {
   /** Movies or TV series; `type=tv` in the URL, movies when absent. */
   kind: TitleKind;
@@ -62,6 +76,11 @@ export interface BrowseState {
    * Optional so a state without it reads as Any.
    */
   runtime?: Runtime;
+  /**
+   * The language titles were originally made in; absent for Any. `language=es` in the URL. Not the language TMDB
+   * text is requested in. Optional so a state without it reads as Any.
+   */
+  language?: Language;
 }
 
 export function firstParam(value: SearchParamValue): string | undefined {
@@ -131,6 +150,12 @@ function parseRuntime(value: SearchParamValue): Runtime | undefined {
   return RUNTIMES.find((runtime) => String(runtime) === raw);
 }
 
+/** A listed language code, exactly, e.g. "es"; anything else (`EN`, `de`, `en-US`, `english`, empty) reads as Any. */
+function parseLanguage(value: SearchParamValue): Language | undefined {
+  const raw = firstParam(value);
+  return LANGUAGES.find((language) => language === raw);
+}
+
 const NO_PROVIDERS: ReadonlySet<number> = new Set();
 
 /**
@@ -160,15 +185,16 @@ export function parseBrowseParams(
     decade: parseDecade(params.decade),
     rating: parseRating(params.rating),
     runtime: parseRuntime(params.runtime),
+    language: parseLanguage(params.language),
   };
 }
 
 /**
  * A home page URL. `type` is set only for TV, so movie links stay as they were before TV browse, `decade`,
- * `rating` and `runtime` only when one is set, and `region` only when it came from the URL. List separators stay
+ * `rating`, `runtime` and `language` only when one is set, and `region` only when it came from the URL. List separators stay
  * literal commas (`genre=28,35`, `providers=8,337`), not `%2C`, so links read as the spec writes them.
  */
-export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating, runtime }: BrowseState): string {
+export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, decade, rating, runtime, language }: BrowseState): string {
   const query = new URLSearchParams();
   if (kind === "tv") query.set("type", "tv");
   if (genres.length > 0) query.set("genre", genres.join(","));
@@ -176,6 +202,7 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   if (decade !== undefined) query.set("decade", String(decade));
   if (rating !== undefined) query.set("rating", String(rating));
   if (runtime !== undefined) query.set("runtime", String(runtime));
+  if (language !== undefined) query.set("language", language);
   if (regionFromUrl) query.set("region", region);
   if (sort !== DEFAULT_SORT) query.set("sort", sort);
   if (page > 1) query.set("page", String(page));
@@ -183,15 +210,25 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
   return search ? `/?${search}` : "/";
 }
 
-/** Whether the state applies a genre, a service, a decade, a rating or a runtime: what "Clear filters" removes. */
-export function hasFilters({ genres, providers, decade, rating, runtime }: BrowseState): boolean {
-  return genres.length > 0 || providers.length > 0 || decade !== undefined || rating !== undefined || runtime !== undefined;
+/**
+ * Whether the state applies a genre, a service, a decade, a rating, a runtime or a language: what "Clear filters"
+ * removes.
+ */
+export function hasFilters({ genres, providers, decade, rating, runtime, language }: BrowseState): boolean {
+  return (
+    genres.length > 0 ||
+    providers.length > 0 ||
+    decade !== undefined ||
+    rating !== undefined ||
+    runtime !== undefined ||
+    language !== undefined
+  );
 }
 
 /**
- * The home page URL without genres, services, decade, rating or runtime, from page 1; `type`, `sort` and `region`
- * follow `browseHref`.
+ * The home page URL without genres, services, decade, rating, runtime or language, from page 1; `type`, `sort` and
+ * `region` follow `browseHref`.
  */
 export function clearFiltersHref(state: BrowseState): string {
-  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, runtime: undefined, page: 1 });
+  return browseHref({ ...state, genres: [], providers: [], decade: undefined, rating: undefined, runtime: undefined, language: undefined, page: 1 });
 }

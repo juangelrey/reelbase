@@ -12,6 +12,7 @@ import { TitleGrid } from "@/components/title-grid";
 import {
   browseHref,
   firstParam,
+  LANGUAGE_NAMES,
   parseBrowseParams,
   parseKind,
   type BrowseState,
@@ -29,21 +30,28 @@ const PAGE_SIZE = 20;
 const BROWSE_KINDS = ["movie", "tv"] as const;
 
 /**
- * The empty-grid text, naming the genre, service, rating and runtime filters in play ("rated 7+", "under 120 min").
- * The hint suggests removing one when more than one of them is set, and trying another when only one is.
+ * The empty-grid text, naming the genre, service, rating, runtime and language filters in play ("rated 7+",
+ * "under 120 min", "in Spanish"). The hint suggests removing one when more than one of them is set, and trying
+ * another when only one is.
  */
-function emptyMessage({ genres, providers, rating, runtime }: BrowseState, noun: string): string {
+function emptyMessage({ genres, providers, rating, runtime, language }: BrowseState, noun: string): string {
   const genrePart = genres.length === 0 ? "" : genres.length === 1 ? "this genre" : "these genres";
   const servicePart = providers.length === 0 ? "" : providers.length === 1 ? "this service" : "these services";
   const ratingPart = rating === undefined ? "" : ` rated ${rating}+`;
   const runtimePart = runtime === undefined ? "" : ` under ${runtime} min`;
-  const subject = `${noun}${ratingPart}${runtimePart}`;
-  const filterCount = genres.length + providers.length + (rating === undefined ? 0 : 1) + (runtime === undefined ? 0 : 1);
+  const languagePart = language === undefined ? "" : ` in ${LANGUAGE_NAMES[language]}`;
+  const subject = `${noun}${ratingPart}${runtimePart}${languagePart}`;
+  const filterCount =
+    genres.length +
+    providers.length +
+    (rating === undefined ? 0 : 1) +
+    (runtime === undefined ? 0 : 1) +
+    (language === undefined ? 0 : 1);
   const hint = `${filterCount > 1 ? "Try removing one" : "Try another one"}, or show all ${noun}.`;
   if (genrePart && servicePart) return `No ${subject} match ${genrePart} on ${servicePart}. ${hint}`;
   if (servicePart) return `No ${subject} stream on ${servicePart}. ${hint}`;
   if (genrePart) return `No ${subject} match ${genrePart}. ${hint}`;
-  if (ratingPart || runtimePart) return `No ${subject} to show. ${hint}`;
+  if (ratingPart || runtimePart || languagePart) return `No ${subject} to show. ${hint}`;
   return `No ${noun} to show right now.`;
 }
 

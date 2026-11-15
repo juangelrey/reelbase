@@ -412,6 +412,64 @@ describe("discoverTitles", () => {
     expect(params.has("with_runtime.gte")).toBe(false);
     expect(params.has("with_runtime.lte")).toBe(false);
   });
+  it.each(["en", "es", "fr", "ja", "ko"] as const)("with language %s, asks for that original language", async (language) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], language });
+    expect(requestedUrl(fetchMock).searchParams.get("with_original_language")).toBe(language);
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)(
+    "sends a language with genre, service, decade, rating and runtime filters in the %s sort",
+    async (sort) => {
+      const without = stubFetch(discover);
+      await discoverTitles({ kind: "movie", genres: [18], sort, page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120 });
+      const withoutParams = requestedUrl(without).searchParams;
+      const withLanguage = stubFetch(discover);
+      await discoverTitles({ kind: "movie", genres: [18], sort, page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120, language: "es" });
+      const params = requestedUrl(withLanguage).searchParams;
+      expect(params.get("with_original_language")).toBe("es");
+      expect(params.get("with_genres")).toBe("18");
+      expect(params.get("with_watch_providers")).toBe("8");
+      expect(params.get("primary_release_date.gte")).toBe("2010-01-01");
+      expect(params.get("vote_average.gte")).toBe("7");
+      expect(params.get("with_runtime.lte")).toBe("119");
+      params.delete("with_original_language");
+      expect(params.toString()).toBe(withoutParams.toString());
+    },
+  );
+
+  it("keeps the release sort key with a language", async () => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort: "release", page: 1, region: "US", regionFromUrl: false, providers: [], language: "ja" });
+    expect(requestedUrl(fetchMock).searchParams.get("sort_by")).toBe("primary_release_date.desc");
+  });
+
+  it.each([
+    ["popularity", undefined],
+    ["rating", undefined],
+    ["release", undefined],
+    ["title", undefined],
+    ["popularity", 7],
+    ["release", 7],
+  ] as const)("keeps the %s sort's vote floor (rating %s) and the text language with and without a language", async (sort, rating) => {
+    const without = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating });
+    const withoutParams = requestedUrl(without).searchParams;
+    const withLanguage = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating, language: "ko" });
+    const withParams = requestedUrl(withLanguage).searchParams;
+    expect(withParams.get("sort_by")).toBe(withoutParams.get("sort_by"));
+    expect(withParams.get("vote_count.gte")).toBe(withoutParams.get("vote_count.gte"));
+    expect(withParams.get("language")).toBe("en-US");
+    expect(withoutParams.get("language")).toBe("en-US");
+    expect(withParams.get("with_original_language")).toBe("ko");
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)("sends no original language without a language in the %s sort", async (sort) => {
+    const fetchMock = stubFetch(discover);
+    await discoverTitles({ kind: "movie", genres: [18], sort, page: 1, region: "US", regionFromUrl: false, providers: [8], decade: 2010, rating: 7, runtime: 90 });
+    expect(requestedUrl(fetchMock).searchParams.has("with_original_language")).toBe(false);
+  });
 });
 
 describe("discoverShows", () => {
@@ -593,6 +651,64 @@ describe("discoverShows", () => {
     const params = requestedUrl(fetchMock).searchParams;
     expect(params.has("with_runtime.gte")).toBe(false);
     expect(params.has("with_runtime.lte")).toBe(false);
+  });
+  it.each(["en", "es", "fr", "ja", "ko"] as const)("with language %s, asks for that original language", async (language) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "popularity", page: 1, region: "US", regionFromUrl: false, providers: [], language });
+    expect(requestedUrl(fetchMock).searchParams.get("with_original_language")).toBe(language);
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)(
+    "sends a language with genre, service, decade, rating and runtime filters in the %s sort",
+    async (sort) => {
+      const without = stubFetch(discoverTv);
+      await discoverShows({ kind: "tv", genres: [18], sort, page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120 });
+      const withoutParams = requestedUrl(without).searchParams;
+      const withLanguage = stubFetch(discoverTv);
+      await discoverShows({ kind: "tv", genres: [18], sort, page: 2, region: "ES", regionFromUrl: true, providers: [8], decade: 2010, rating: 7, runtime: 120, language: "es" });
+      const params = requestedUrl(withLanguage).searchParams;
+      expect(params.get("with_original_language")).toBe("es");
+      expect(params.get("with_genres")).toBe("18");
+      expect(params.get("with_watch_providers")).toBe("8");
+      expect(params.get("first_air_date.gte")).toBe("2010-01-01");
+      expect(params.get("vote_average.gte")).toBe("7");
+      expect(params.get("with_runtime.lte")).toBe("119");
+      params.delete("with_original_language");
+      expect(params.toString()).toBe(withoutParams.toString());
+    },
+  );
+
+  it("keeps the release sort key with a language", async () => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort: "release", page: 1, region: "US", regionFromUrl: false, providers: [], language: "ja" });
+    expect(requestedUrl(fetchMock).searchParams.get("sort_by")).toBe("first_air_date.desc");
+  });
+
+  it.each([
+    ["popularity", undefined],
+    ["rating", undefined],
+    ["release", undefined],
+    ["title", undefined],
+    ["popularity", 7],
+    ["release", 7],
+  ] as const)("keeps the %s sort's vote floor (rating %s) and the text language with and without a language", async (sort, rating) => {
+    const without = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating });
+    const withoutParams = requestedUrl(without).searchParams;
+    const withLanguage = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [], sort, page: 1, region: "US", regionFromUrl: false, providers: [], rating, language: "ko" });
+    const withParams = requestedUrl(withLanguage).searchParams;
+    expect(withParams.get("sort_by")).toBe(withoutParams.get("sort_by"));
+    expect(withParams.get("vote_count.gte")).toBe(withoutParams.get("vote_count.gte"));
+    expect(withParams.get("language")).toBe("en-US");
+    expect(withoutParams.get("language")).toBe("en-US");
+    expect(withParams.get("with_original_language")).toBe("ko");
+  });
+
+  it.each(["popularity", "rating", "release", "title"] as const)("sends no original language without a language in the %s sort", async (sort) => {
+    const fetchMock = stubFetch(discoverTv);
+    await discoverShows({ kind: "tv", genres: [18], sort, page: 1, region: "US", regionFromUrl: false, providers: [8], decade: 2010, rating: 7, runtime: 90 });
+    expect(requestedUrl(fetchMock).searchParams.has("with_original_language")).toBe(false);
   });
 });
 

@@ -12,6 +12,7 @@ import {
 import type { Genre } from "@/lib/catalog/types";
 import { DecadeFilter } from "./decade-filter";
 import { RatingFilter } from "./rating-filter";
+import { LanguageFilter } from "./language-filter";
 import { RuntimeFilter } from "./runtime-filter";
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -59,7 +60,7 @@ const FOCUS = "rounded focus-visible:outline-2 focus-visible:outline-offset-2 fo
 /**
  * The home page's filter bar, which stays at the top of the window while the results scroll. Its first row holds
  * `children` (the Movies / TV switch) and the sort; under it the genres run on one line that scrolls sideways, and
- * under them the decade pills, then the rating pills, then the runtime pills.
+ * under them the decade pills, then the rating pills, then the runtime pills, then the language pills.
  * A genre link toggles its genre in the selection, and "All" clears it. Any change starts again from page 1.
  */
 export function BrowseControls({ genres, state, children }: BrowseControlsProps) {
@@ -117,6 +118,7 @@ export function BrowseControls({ genres, state, children }: BrowseControlsProps)
       <DecadeFilter state={state} />
       <RatingFilter state={state} />
       <RuntimeFilter state={state} />
+      <LanguageFilter state={state} />
       {hasFilters(state) && (
         <Link href={clearFiltersHref(state)} className={`${FOCUS} inline-block text-xs text-zinc-400 underline hover:text-strong`}>
           Clear filters

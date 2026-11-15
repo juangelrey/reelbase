@@ -1,6 +1,8 @@
 import {
   DECADES,
   DEFAULT_SORT,
+  LANGUAGES,
+  LANGUAGE_NAMES,
   RATINGS,
   RUNTIMES,
   browseHref,
@@ -384,6 +386,52 @@ describe("browseHref runtime", () => {
   });
 });
 
+describe("parseBrowseParams language", () => {
+  it("lists English, Spanish, French, Japanese and Korean, in that order", () => {
+    expect(LANGUAGES).toEqual(["en", "es", "fr", "ja", "ko"]);
+    expect(LANGUAGES.map((language) => LANGUAGE_NAMES[language])).toEqual(["English", "Spanish", "French", "Japanese", "Korean"]);
+  });
+
+  it.each(["en", "es", "fr", "ja", "ko"])("reads language=%s", (language) => {
+    expect(parseBrowseParams({ language }, known, "US").language).toBe(language);
+  });
+
+  it("reads Any when the param is absent", () => {
+    expect(parseBrowseParams({}, known, "US").language).toBeUndefined();
+  });
+
+  it.each(["", "EN", "Es", "de", "en-US", "english", " en", "en ", "zh"])("reads language=%j as Any", (language) => {
+    expect(parseBrowseParams({ language }, known, "US").language).toBeUndefined();
+  });
+
+  it("uses the first value when the param repeats", () => {
+    expect(parseBrowseParams({ language: ["ja", "en"] }, known, "US").language).toBe("ja");
+    expect(parseBrowseParams({ language: ["EN", "en"] }, known, "US").language).toBeUndefined();
+  });
+});
+
+describe("browseHref language", () => {
+  const base = { kind: "movie" as const, genres: [], sort: "popularity" as const, page: 1, region: "US", regionFromUrl: false, providers: [] };
+
+  it("writes language=<code> only for a set language", () => {
+    expect(browseHref({ ...base, language: "es" })).toBe("/?language=es");
+    expect(browseHref({ ...base, language: undefined })).toBe("/");
+    expect(browseHref(base)).toBe("/");
+  });
+
+  it("writes the language after the runtime, alongside every other param", () => {
+    expect(
+      browseHref({ ...base, kind: "tv", genres: [18], providers: [8], decade: 1990, rating: 8, runtime: 90, language: "ko", region: "ES", regionFromUrl: true, sort: "release", page: 2 }),
+    ).toBe("/?type=tv&genre=18&providers=8&decade=1990&rating=8&runtime=90&language=ko&region=ES&sort=release&page=2");
+  });
+
+  it("round-trips a language with genres, services, decade, rating, runtime and sort", () => {
+    const state = { ...base, genres: [28], providers: [8], decade: 1980 as const, rating: 6 as const, runtime: 150 as const, language: "fr" as const, sort: "rating" as const, page: 3 };
+    const query = Object.fromEntries(new URLSearchParams(browseHref(state).slice(2)));
+    expect(parseBrowseParams(query, known, "US", new Set([8]))).toEqual(state);
+  });
+});
+
 describe("clearFiltersHref", () => {
   const filtered = { kind: "tv" as const, genres: [18], providers: [8], decade: 2010 as const, region: "ES", regionFromUrl: true, sort: "rating" as const, page: 3 };
 
@@ -408,6 +456,11 @@ describe("clearFiltersHref", () => {
     expect(clearFiltersHref({ ...filtered, rating: 8, runtime: 120 })).toBe("/?type=tv&region=ES&sort=rating");
     expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, runtime: 90 })).toBe("/?type=tv&region=ES&sort=rating");
   });
+
+  it("drops the language too", () => {
+    expect(clearFiltersHref({ ...filtered, runtime: 120, language: "es" })).toBe("/?type=tv&region=ES&sort=rating");
+    expect(clearFiltersHref({ ...filtered, genres: [], providers: [], decade: undefined, language: "ja" })).toBe("/?type=tv&region=ES&sort=rating");
+  });
 });
 
 describe("hasFilters", () => {
@@ -429,13 +482,18 @@ describe("hasFilters", () => {
     expect(hasFilters(parseBrowseParams({ runtime: "90" }, known, "US"))).toBe(true);
   });
 
+  it("is true with a language alone", () => {
+    expect(hasFilters({ ...base, language: "ko" })).toBe(true);
+    expect(hasFilters(parseBrowseParams({ language: "es" }, known, "US"))).toBe(true);
+  });
+
   it("is false with none of them, whatever the type, sort, region or page", () => {
     expect(hasFilters(base)).toBe(false);
     expect(hasFilters({ ...base, kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 })).toBe(false);
   });
 
   it("is false for raw filter params the parse drops", () => {
-    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5", runtime: "100" }, known, "US"))).toBe(false);
+    expect(hasFilters(parseBrowseParams({ decade: "1960", genre: "abc", providers: "8", rating: "7.5", runtime: "100", language: "EN" }, known, "US"))).toBe(false);
   });
 });
 
