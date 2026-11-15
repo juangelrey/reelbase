@@ -39,8 +39,8 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   ko: "Korean",
 };
 
-/** Where a browse's services came from while saved services exist; see `BrowseState.providerSource`. */
-export type ProviderSource = "saved" | "url" | "any";
+/** Where a browse's services came from while saved services exist, or Settings only; see `BrowseState.providerSource`. */
+export type ProviderSource = "saved" | "url" | "any" | "settings";
 
 export interface BrowseState {
   /** Movies or TV series; `type=tv` in the URL, movies when absent. */
@@ -70,6 +70,8 @@ export interface BrowseState {
    * `reelbase-services`): `"saved"` when the URL has no `providers` param and the saved services the top 12 lists
    * apply (possibly none), `"url"` when a `providers` param with ids won, and `"any"` for `providers=any`. Absent
    * when nothing is saved, so URLs stay as they were before saved services. See `browseHref` for what each writes.
+   * `"settings"` marks the Settings-only mode (flags `services-from-settings` and `settings-page`): the services are
+   * the saved ones the top 12 lists (possibly none), whatever the URL says, and no link writes `providers`.
    */
   providerSource?: ProviderSource;
   /**
@@ -193,6 +195,14 @@ function resolveProviders(
   return savedServices.length > 0 ? { providers, providerSource: source } : { providers };
 }
 
+/** The saved services the top 12 lists, whatever the URL says: the Settings-only mode. */
+function settingsProviders(
+  listedProviderIds: ReadonlySet<number>,
+  savedServices: readonly number[],
+): Pick<BrowseState, "providers" | "providerSource"> {
+  return { providers: savedServices.filter((id) => listedProviderIds.has(id)), providerSource: "settings" };
+}
+
 /**
  * The browse state from the URL. `knownGenreIds` is the genre list for the kind in `type` (read it with
  * `parseKind` first), so a genre id from the other kind's list is dropped. `region` is the region that
@@ -201,6 +211,8 @@ function resolveProviders(
  * `providers` is dropped, which is how services fall away after a kind or region change. Without it, no
  * service applies. `savedServices` are the visitor's saved provider ids, ascending (`parseSavedServices`), or
  * none when flag `settings-page` is off; they apply only when the URL has no `providers` param with ids.
+ * With `servicesFromSettings` (flags `services-from-settings` and `settings-page` on), the `providers` param is
+ * ignored and the saved services always apply, with source `"settings"`.
  */
 export function parseBrowseParams(
   params: Record<string, SearchParamValue>,
@@ -208,6 +220,7 @@ export function parseBrowseParams(
   region: string,
   listedProviderIds: ReadonlySet<number> = NO_PROVIDERS,
   savedServices: readonly number[] = [],
+  servicesFromSettings = false,
 ): BrowseState {
   const sort = firstParam(params.sort);
   return {
@@ -218,7 +231,9 @@ export function parseBrowseParams(
     region,
     // An unlisted `?region=` falls through to the cookie or language, so it does not count as from the URL.
     regionFromUrl: firstParam(params.region) === region,
-    ...resolveProviders(params.providers, listedProviderIds, savedServices),
+    ...(servicesFromSettings
+      ? settingsProviders(listedProviderIds, savedServices)
+      : resolveProviders(params.providers, listedProviderIds, savedServices)),
     decade: parseDecade(params.decade),
     rating: parseRating(params.rating),
     runtime: parseRuntime(params.runtime),
@@ -235,13 +250,14 @@ export function parseBrowseParams(
  * resolves the saved services for its own kind and region, even when none applied here. From the URL or Any
  * service (`"url"`, `"any"`), it is the ids, or `providers=any` for none, so the saved services do not re-apply
  * mid-browse. With nothing saved (no source), it is the ids, or left out for none, and `any` is never written.
- * Links that pick services set the source with `withProviders`.
+ * From Settings only (`"settings"`), it is always left out. Links that pick services set the source with
+ * `withProviders`.
  */
 export function browseHref({ kind, genres, sort, page, region, regionFromUrl, providers, providerSource, decade, rating, runtime, language }: BrowseState): string {
   const query = new URLSearchParams();
   if (kind === "tv") query.set("type", "tv");
   if (genres.length > 0) query.set("genre", genres.join(","));
-  if (providerSource !== "saved") {
+  if (providerSource !== "saved" && providerSource !== "settings") {
     if (providers.length > 0) query.set("providers", providers.join(","));
     else if (providerSource !== undefined) query.set("providers", ANY_PROVIDER);
   }
@@ -260,20 +276,22 @@ export function browseHref({ kind, genres, sort, page, region, regionFromUrl, pr
  * `state` with the visitor's own service choice `providers` (a pill, Any service, Clear filters): while saved
  * services exist, its source becomes the URL's, or `"any"` for none, so `browseHref` writes the ids or
  * `providers=any` rather than leaving the saved services to apply. With nothing saved, only the services change.
+ * From Settings only, home offers no service choice, so the state is returned unchanged.
  */
 export function withProviders(state: BrowseState, providers: number[]): BrowseState {
+  if (state.providerSource === "settings") return state;
   if (state.providerSource === undefined) return { ...state, providers };
   return { ...state, providers, providerSource: providers.length > 0 ? "url" : "any" };
 }
 
 /**
  * Whether the state applies a genre, a service, a decade, a rating, a runtime or a language: what "Clear filters"
- * removes.
+ * removes. From Settings only, the services are not counted, since Clear filters leaves them as they are.
  */
-export function hasFilters({ genres, providers, decade, rating, runtime, language }: BrowseState): boolean {
+export function hasFilters({ genres, providers, providerSource, decade, rating, runtime, language }: BrowseState): boolean {
   return (
     genres.length > 0 ||
-    providers.length > 0 ||
+    (providerSource !== "settings" && providers.length > 0) ||
     decade !== undefined ||
     rating !== undefined ||
     runtime !== undefined ||
@@ -283,7 +301,7 @@ export function hasFilters({ genres, providers, decade, rating, runtime, languag
 
 /**
  * The home page URL without genres, services, decade, rating, runtime or language, from page 1; `type`, `sort` and
- * `region` follow `browseHref`.
+ * `region` follow `browseHref`. From Settings only, the services stay the saved ones, as no link writes them.
  */
 export function clearFiltersHref(state: BrowseState): string {
   return browseHref({ ...withProviders(state, []), genres: [], decade: undefined, rating: undefined, runtime: undefined, language: undefined, page: 1 });

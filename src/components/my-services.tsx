@@ -10,6 +10,8 @@ interface MyServicesProps {
   services: Provider[];
   /** Every saved provider id the server read, including ids this region does not list, which stay saved. */
   saved: number[];
+  /** Whether to show the "Streaming data by JustWatch" credit: only while flag `services-from-settings` is off. */
+  credit?: boolean;
 }
 
 /** Re-renders every mounted list after a write here; the window's focus covers a write from another tab. */
@@ -50,7 +52,7 @@ function serverSnapshot(): null {
  * start from the cookie as it is now, not as the server read it, so a stale page (a second tab, or Back restoring
  * a cached one) never drops services saved since.
  */
-export function MyServices({ services, saved: serverSaved }: MyServicesProps) {
+export function MyServices({ services, saved: serverSaved, credit = false }: MyServicesProps) {
   const cookie = useSyncExternalStore(subscribe, readSavedCookie, serverSnapshot);
   const saved = cookie === null ? serverSaved : parseSavedServices(cookie);
   if (services.length === 0) return <p className="text-sm text-zinc-400">No streaming services listed for this region.</p>;
@@ -77,7 +79,7 @@ export function MyServices({ services, saved: serverSaved }: MyServicesProps) {
           </li>
         ))}
       </ul>
-      <JustWatchCredit />
+      {credit && <JustWatchCredit />}
     </div>
   );
 }

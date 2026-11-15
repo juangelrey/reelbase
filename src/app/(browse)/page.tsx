@@ -8,6 +8,7 @@ import { Pagination } from "@/components/pagination";
 import { ProviderFilter } from "@/components/provider-filter";
 import { RankedTitles } from "@/components/ranked-titles";
 import { RegionSelect } from "@/components/region-select";
+import { StreamingOn } from "@/components/streaming-on";
 import { TitleGrid } from "@/components/title-grid";
 import {
   browseHref,
@@ -35,15 +36,24 @@ const BROWSE_KINDS = ["movie", "tv"] as const;
  * "under 120 min", "in Spanish"). The hint suggests removing one when more than one of them is set, and trying
  * another when only one is. With `namesDecade` (flag `decade-empty-hint`), it also names the decade ("from the
  * 1990s") straight after the noun and counts it as a filter; without it, the decade is left out as before.
+ * When saved services apply from Settings (flags `services-from-settings` and `settings-page`), it speaks of
+ * "your services", and the hint counts only the other filters, since Settings, not home, changes the services.
  */
 function emptyMessage(
-  { genres, providers, decade, rating, runtime, language }: BrowseState,
+  { genres, providers, providerSource, decade, rating, runtime, language }: BrowseState,
   noun: string,
   namesDecade: boolean,
 ): string {
   const shownDecade = namesDecade ? decade : undefined;
   const genrePart = genres.length === 0 ? "" : genres.length === 1 ? "this genre" : "these genres";
-  const servicePart = providers.length === 0 ? "" : providers.length === 1 ? "this service" : "these services";
+  const fromSettings = providerSource === "settings" && providers.length > 0;
+  const servicePart = fromSettings
+    ? "your services"
+    : providers.length === 0
+      ? ""
+      : providers.length === 1
+        ? "this service"
+        : "these services";
   const decadePart = shownDecade === undefined ? "" : ` from the ${shownDecade}s`;
   const ratingPart = rating === undefined ? "" : ` rated ${rating}+`;
   const runtimePart = runtime === undefined ? "" : ` under ${runtime} min`;
@@ -51,14 +61,14 @@ function emptyMessage(
   const subject = `${noun}${decadePart}${ratingPart}${runtimePart}${languagePart}`;
   const filterCount =
     genres.length +
-    providers.length +
+    (fromSettings ? 0 : providers.length) +
     (shownDecade === undefined ? 0 : 1) +
     (rating === undefined ? 0 : 1) +
     (runtime === undefined ? 0 : 1) +
     (language === undefined ? 0 : 1);
   const hint = `${filterCount > 1 ? "Try removing one" : "Try another one"}, or show all ${noun}.`;
   if (genrePart && servicePart) return `No ${subject} match ${genrePart} on ${servicePart}. ${hint}`;
-  if (servicePart) return `No ${subject} stream on ${servicePart}. ${hint}`;
+  if (servicePart) return fromSettings && filterCount === 0 ? `No ${noun} stream on your services right now.` : `No ${subject} stream on ${servicePart}. ${hint}`;
   if (genrePart) return `No ${subject} match ${genrePart}. ${hint}`;
   if (decadePart || ratingPart || runtimePart || languagePart) return `No ${subject} to show. ${hint}`;
   return `No ${noun} to show right now.`;
@@ -74,13 +84,16 @@ export default async function Home({ searchParams }: HomeProps) {
   const [params, cookieStore, requestHeaders] = await Promise.all([searchParams, cookies(), headers()]);
   // Movie and TV genre ids differ, so the genre is checked against the list for the chosen kind.
   const kind = parseKind(params.type);
-  const [genres, regions, marquee, namesDecade, settingsPage] = await Promise.all([
+  const [genres, regions, marquee, namesDecade, settingsPage, servicesFlag] = await Promise.all([
     listGenres(kind),
     listRegions(),
     isMarqueeHome(),
     isFlagOn("decade-empty-hint"),
     isFlagOn("settings-page"),
+    isFlagOn("services-from-settings"),
   ]);
+  // Both flags on: home takes its services from Settings only, with no pills and no `providers` param.
+  const servicesFromSettings = settingsPage && servicesFlag;
   const region = resolveRegion(
     {
       param: firstParam(params.region),
@@ -100,6 +113,7 @@ export default async function Home({ searchParams }: HomeProps) {
     region,
     new Set(providers.map(({ id }) => id)),
     savedServices,
+    servicesFromSettings,
   );
   const { results, page, totalPages } = state.kind === "tv" ? await discoverShows(state) : await discoverTitles(state);
   // A page past the last one (a stale or edited link) falls back to page 1.
@@ -131,8 +145,13 @@ export default async function Home({ searchParams }: HomeProps) {
       {/* With flag `settings-page` on, the region is chosen on /settings; ?region= and the cookie still apply.
           Off, it shows here; changing region keeps the other filters and returns to page 1 (via /region). */}
       {!settingsPage && <RegionSelect regions={regions} state={state} />}
-      {/* The region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
-      <ProviderFilter providers={providers} state={state} />
+      {/* From Settings only, a line names the services that apply and links to /settings to change them. Otherwise
+          the region's services for this kind, with the JustWatch credit; pills keep every other filter. */}
+      {servicesFromSettings ? (
+        <StreamingOn providers={providers} selected={state.providers} />
+      ) : (
+        <ProviderFilter providers={providers} state={state} />
+      )}
       {marquee && lead ? (
         <RankedTitles titles={rest} firstRank={(page - 1) * PAGE_SIZE + 2} />
       ) : (
