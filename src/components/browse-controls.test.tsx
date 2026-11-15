@@ -100,7 +100,14 @@ describe("BrowseControls clear filters link", () => {
     expect(screen.getAllByRole("link", { name: "Clear filters" })).toHaveLength(1);
   });
 
-  it("is not shown without a genre, service or decade", () => {
+  it("shows one link to clear a selected rating alone, without the rating in its href", () => {
+    renderControls({ rating: 8 });
+    const links = screen.getAllByRole("link", { name: "Clear filters" });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/");
+  });
+
+  it("is not shown without a genre, service, decade or rating", () => {
     renderControls({ kind: "tv", sort: "rating", region: "ES", regionFromUrl: true, page: 2 });
     expect(screen.queryByRole("link", { name: "Clear filters" })).not.toBeInTheDocument();
   });
