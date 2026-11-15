@@ -11,7 +11,7 @@ interface TitlePageProps {
   params: Promise<{ id: string }>;
 }
 
-// Rendered on first request and cached for an hour; no movie is prerendered at build time.
+// Rendered on first request and cached for an hour. No movie is prerendered at build time.
 export const revalidate = 3600;
 export const dynamicParams = true;
 
