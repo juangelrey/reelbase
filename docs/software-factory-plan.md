@@ -73,7 +73,9 @@ Watch comes before Start: once the label starts runs, nobody is looking at produ
   PRD is written.
 - A phase is done only when its "Done when" is observed, not when its code is merged.
 - A phase that changes `.claude/` or CI is one-way: one PRD, built with `/as-build auto` in a
-  session you are in, and you merge it.
+  session you are in, and you merge it. What holds it for you is the required `door` check, not
+  the code owner rule, which passes for its author (#123). Gate protection, under [Later](#later),
+  is the stronger fix.
 - A PRD for a factory phase copies that phase's Scope list as its Behaviour, word for word.
 
 ### Phase 2: merge
@@ -107,7 +109,9 @@ as they were run:
 
 1. The ruleset's required checks become: `Lint, typecheck, test and build`, `test-integrity`,
    `door`, `e2e-preview`. Each has **GitHub Actions** as its source, so a status with the same name
-   posted through the API by anyone else does not count.
+   posted through the API by anyone else does not count. Done before the Phase 2 PRD's PR opens.
+   Until `door` is required, nothing holds that PR: the code owner rule passes for its author
+   (#123), and its own `automerge.yml` turns on auto-merge.
 2. The settings from the test stay on. You merge a one-way PR with the bypass option. It is also
    your way out when a required check never reports.
 
@@ -118,10 +122,14 @@ as they were run:
    when the head branch is in this repository and starts with `claude/`, it runs
    `gh pr merge --auto --merge` with `permissions: contents: write, pull-requests: write`. The job
    fails if the command fails.
-3. `.claude/skills/as-build/autonomous.md`, step 8, `dark` mode: the run ends after it opens the
-   PR and comments on the PRD. It no longer waits for checks or spawns the `merger`.
-4. `.claude/skills/as-build/SKILL.md`: the lines that say a `dark` PR is merged by the `merger`
-   say instead that GitHub merges it when its checks are green.
+3. `.claude/skills/as-build/autonomous.md`, `dark` mode: step 8 ends the run after it opens the
+   PR and comments on the PRD. It no longer waits for checks or spawns the `merger`. Its first
+   sentence stays: choosing `dark` is the user's sign-off to deploy two-way-door PRs to production
+   without their manual check. Step 9's summary no longer reports a merge verdict.
+4. `.claude/skills/as-build/SKILL.md`, the description and the Modes table: no line says the user
+   or the `merger` merges the PR. They say instead that a PR from a `claude/` branch merges itself
+   when its required checks are green, so a one-way PR waits for the user, and a PR from any other
+   branch is merged by the user.
 
 The workflow acts on every `claude/` PR, so a two-way PR from `/as-build auto` also merges itself.
 Accepted: it is outside the goal.
@@ -129,8 +137,13 @@ Accepted: it is outside the goal.
 **Not in this phase:** any other change to a skill, an agent, CI or settings. `/as-merge` stays for
 use by hand.
 
-**Test:** the next product PRD, started with **Run now**. It is the first time the workflow's token
-turns on auto-merge, and the first merge made by `github-actions`.
+**Test:** two steps.
+
+1. The Phase 2 PRD's own PR is the first time the workflow's token turns on auto-merge. It must stay
+   open, held by a red `door`. The run checks that the ruleset requires `door` before it opens the
+   PR, and stops if not. If `door` is green on that PR, the run turns auto-merge off and stops: the
+   change meant to hold it is wrong.
+2. The next product PRD, started with **Run now**, is the first merge made by `github-actions`.
 
 **Done when:** that PR merges itself and reaches production, and you did nothing after **Run now**.
 
@@ -306,6 +319,8 @@ Beyond the goal and outside the phases. Each needs your decision.
 - Gate protection: a PR that touches `.github/`, `.claude/` or `scripts/` cannot merge itself.
   Either the code owner is an account that runs do not act as, or a required check runs from
   `main`.
+- `/as-merge` becomes by-hand only: its description still says it runs as the `merger` agent from
+  `/as-build dark`, which is no longer true after Phase 2.
 - The scope rules move from the PRD into the skills: the review bar in `as-review`, the ticket cap
   in `/as-plan`.
 - Agent verification: controls migrated to ui-sdk, a verifier that runs each PR's manual checks, and
@@ -405,8 +420,8 @@ Not yet proven:
 - A `deployment_status` job for `main` passes an Environment limited to `main` (Phase 3, first
   test).
 - `GITHUB_TOKEN` can turn on auto-merge here while the repository default is read-only (Phase 2,
-  test).
-- Vercel deploys `main` after a merge made by `github-actions` (Phase 2, test).
+  test step 1).
+- Vercel deploys `main` after a merge made by `github-actions` (Phase 2, test step 2).
 - The issue trigger can be limited to the `approved` label (Phase 4).
 - A Sentry connector is available to a cloud task (Phase 7).
 
