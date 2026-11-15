@@ -21,11 +21,11 @@ PRD until you answer it.
 
 | Step | State |
 |---|---|
-| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121, #135) |
-| The merge | Done. A green two-way PR merges itself (#135) |
-| Closing the PRD's issues after the merge | By hand. Phase 3 |
-| Watching production | Nothing does. Phase 3 |
-| Starting a run | By hand, with **Run now**. Phase 4 |
+| PRD → plan → tickets → build → two reviews → one PR | Works in a cloud run (#89, #112, #121, #135, #147) |
+| The merge | Done. A green two-way PR merges itself (#135, #147) |
+| Closing the PRD's issues after the deploy | Done. `smoke` closes them (#147) |
+| Watching production | Done. A failed smoke test opens a `bug` issue and emails you (#142) |
+| Starting a run | Works: the `approved` label started the run for #143. Two more PRDs to go. Phase 4 |
 
 ## Path to the goal
 
@@ -33,10 +33,10 @@ One step at a time, in this order.
 
 | Step | Work | Who |
 |---|---|---|
-| Phase 3 | One workflow file, no secrets | One PRD, one-way, you merge |
-| Settings | Require `test-integrity` and `e2e-preview` | You, two minutes |
-| Phase 4 | The trigger | You |
-| | **Goal reached** | |
+| Phase 3 | One workflow file, no secrets | Done (#141) |
+| Settings | Require `test-integrity` and `e2e-preview` | Done |
+| Phase 4 | The trigger | Set up. 1 of 3 PRDs done |
+| | **Goal reached** | After two more PRDs |
 
 **Rules for every phase**
 
@@ -52,8 +52,8 @@ One step at a time, in this order.
 
 GitHub merges, not an agent:
 
-1. `main` has a ruleset (27289358) with required checks. They are the gates. Today:
-   `Lint, typecheck, test and build` and `door`.
+1. `main` has a ruleset (27289358) with required checks. They are the gates:
+   `Lint, typecheck, test and build`, `door`, `test-integrity` and `e2e-preview`.
 2. `automerge.yml` turns on auto-merge for each PR from a `claude/` branch when it opens.
 3. GitHub merges the PR when every required check is green.
 
@@ -76,10 +76,9 @@ own copy with every repository secret. No phase on the path to the goal adds a s
 - Built and merged as #130 (PRD #126).
 - #135 was merged by `github-actions[bot]` 85 seconds after it opened and deployed to Production,
   with no action after **Run now**.
-- Open defect: #135 left its issues #131 to #134 open. Until Phase 3 is done, you close a merged
-  PRD's issues by hand, because an open PRD holds the next one.
+- #135 left its issues open, because a merge by `GITHUB_TOKEN` closes none. Phase 3 fixed it.
 
-### Phase 3: watch
+### Phase 3: watch. Done
 
 **Goal:** a healthy production deploy closes its PRD's issues, and a broken one is reported to you.
 
@@ -109,85 +108,77 @@ Nothing here needs a test first. Each fact it rests on is already observed; see
 - While production is rolled back, the smoke test tests the old version and passes, so it closes
   the fix's issues before the fix is live.
 
-Check once that GitHub emails you when an issue is opened: you must be watching the repository.
-
 **Not in this phase:** rollback or promote by a workflow; any Vercel token; reverting the commit;
 feature flags; Sentry.
 
-**Done when:** all three are observed.
+**Done when:** all three are observed. All three were, on 2026-11-15.
 
-- The workflow, started by hand with an address that fails, opens a `bug` issue.
-- Its own merge deploys, and the PRD's issues close without you.
-- The next product PRD's issues close without you.
+- The workflow, started by hand with an address that fails, opens a `bug` issue: #142, and GitHub
+  emailed you.
+- Its own merge deploys and the smoke test passes: run 43713553788 for #141.
+- The next product PRD's issues close without you: #143 to #146, closed by `github-actions[bot]`
+  after #147 deployed (run 43719518273).
 
-### Settings before Phase 4
+### Settings before Phase 4. Done
 
-Add `test-integrity` and `e2e-preview` to the ruleset's required checks, each with **GitHub
-Actions** as its source. Until then a dark PR merges on lint, types, unit tests, build and `door`
-alone. E2E against the preview of the same build is the real protection before the merge, which is
+`test-integrity` and `e2e-preview` are required checks, each with **GitHub Actions** as its source.
+Head branches are deleted after a merge. E2E against the preview of the same build is the real protection before the merge, which is
 why the production smoke test can be thin.
 
 ### Phase 4: start
 
 **Goal:** putting `approved` on a PRD is your last action.
 
-**First, before anything else.** Open the task's trigger settings and check whether an issue trigger
-can be limited to the `approved` label. Filters are documented for pull request triggers only.
+**The trigger, set up on 2026-11-15** on the task `reelbase-factory`:
 
-**If it cannot:** the trigger fires on the "labeled" action only, and the task prompt starts with
-these lines:
+| Field | Value |
+|---|---|
+| Event | Issue: Labeled |
+| Filter | Labels · is one of · `approved` |
+| Filter | Labels · is one of · `prd` |
+| Filter | State · is one of · `open` |
 
-```text
-If no open `prd` issue has the `approved` label, stop now.
-Otherwise, before anything else, remove `approved` from it and add `building`.
-```
+Filter rows must all match. The values inside one row are alternatives, so the two labels are two
+rows. The task has no schedule. Its on/off switch is the kill switch.
 
-The lines test the issue's state, not the event, because the docs do not say a run can see which
-event started it. A run started by any other label finds no `approved` PRD and ends at once. In
-this variant **Run now** also ends at once, so parked work is restarted by putting `approved` back
-on the PRD, not with **Run now**.
+**What the plan needs from it:**
 
-**Scope.** The cloud trigger. You set it up. The plan needs four things from it:
+1. A run starts when a `prd` issue gets the `approved` label. Observed: 24 seconds after the label
+   on #143.
+2. Nothing else starts a run. The filter reads the issue's labels, not the label just added, so
+   any label added to an open, approved PRD starts another run. Runs label only tickets.
+3. You can turn it off.
+4. You hear about a run's result: the task sends a push notification, and the run comments on the
+   PRD.
 
-1. A run of the `reelbase build` task starts when a `prd` issue gets the `approved` label.
-2. Nothing else starts a run. A label or comment added by a run must not start one: runs act as
-   you, and each event starts a new session.
-3. You can turn it off. That is the kill switch.
-4. You hear about a run's result: turn on "your own updates" in GitHub's email notification
-   settings, because runs comment as you.
+**The prompt must not depend on the Skill tool.** `as-build` has `disable-model-invocation`, and
+the first triggered run stopped on it. The prompt under [Cloud task](#cloud-task) tells the run to
+read the skill's files and states where the task starts and ends.
 
 **Not in this phase:** restarting parked work, which stays a **Run now** by you; any skill change.
 
 **Done when:** a PRD you label reaches production with no other action from you, three PRDs in a
-row.
+row. **1 of 3:** #143, about 22 minutes from the label to production, issues closed.
 
 **Rules from here on**
 
 - One open PRD at a time. `/as-build` and `/as-plan` act on "the open `prd` issue".
 - When a ticket parks, the run finishes the rest and its PR merges. After you answer and remove
-  `needs-human`, press **Run now** (or put `approved` back, in the variant above); the parked
-  ticket gets its own PR.
+  `needs-human`, press **Run now**; the parked ticket gets its own PR.
 - A run that dies says nothing, and so does a PR with a red check. If a PRD has no run comment an
   hour after you approve it, open the task's History. If its PR is not merged 30 minutes after the
   run comment, open the PR.
 - GitHub events above the task's hourly cap are dropped without notice.
-- Every PRD carries these three sections:
+- The skills hold the rules a PRD used to carry. You no longer paste a Rules section.
 
-```markdown
-## Behaviour
-- [each line decided, none open]
+| Rule | Skill |
+|---|---|
+| A PRD has Behaviour and Out of scope sections; the `approved` label is the approval | `as-spec` |
+| At most 4 tickets; the tickets cover every Behaviour line in full | `as-plan` |
+| A finding is Required only when a Behaviour line fails or it makes a test more reliable | `as-review` |
+| A ticket that needs something out of scope is parked; a plumbing failure is reported, not fixed | `as-build` |
 
-## Out of scope
-- [what is not built]
-- Paths outside [the allowed paths]
-
-## Rules
-- At most 4 tickets.
-- A review finding is Required only when a Behaviour line fails. Anything else is Optional and is
-  not fixed in this run.
-- A ticket that needs something listed under Out of scope is parked, not widened.
-- If CI, a skill or a setting fails, report it and stop. Do not fix it.
-```
+The prompt for a PRD is `/as-spec` and one or two sentences that name the feature.
 
 ## After the goal
 
@@ -196,7 +187,7 @@ list then, not before.
 
 | Phase | Goal | Starts when |
 |---|---|---|
-| Cleanup | One one-way PR: the PRD's Rules section moves into the skills; `CODEOWNERS`, the code owner rule, the `merger` agent and `/as-merge` are deleted | Your decision |
+| Cleanup | One one-way PR: `CODEOWNERS`, the code owner rule, the `merger` agent and `/as-merge` are deleted | Your decision |
 | 5 | Self-heal: the run stays until its PR is merged and fixes red checks, with a cap on attempts | A red PR has cost you an action |
 | 6 | Auto-revert: a broken merge is reverted on `main`, so production heals without rollback and promote | `bug` issues from Phase 3 are frequent |
 | 7 | Repair: a production error in Sentry becomes a `bug` issue, and an approved `bug` issue is built | Gate protection, under [Later](#later), is in place |
@@ -280,15 +271,32 @@ deployments, and previews need it, so it stays a repository secret.
 
 ## Cloud task
 
-Task `reelbase build`: repository `reelbase`, Default environment, coordinator model Opus.
+Task `reelbase-factory`: repository `reelbase`, Default environment, coordinator model Opus.
 
 ```text
-Run the as-build skill in dark mode (`/as-build dark`).
+You build the open, approved PRD of this repository. Nobody is watching.
 
-This run is unattended: my approval of the open `prd` issue covers the plan,
-and where the skill says to stop and ask, park the ticket instead.
+Start
+- Find the open issue labeled both `prd` and `approved`.
+- If there is none, or more than one, stop and change nothing.
 
-End with a comment on the `prd` issue summarizing the run.
+Work
+- Read `.claude/skills/as-build/SKILL.md` and
+  `.claude/skills/as-build/autonomous.md`, and follow their `dark` mode
+  from step 1.
+- Do not use the Skill tool for this: the skill is marked for manual
+  invocation, and this prompt is that invocation, written by me.
+- My `approved` label covers the plan: do not wait for an approval.
+- Where the skill says to stop and ask, park the ticket instead.
+
+End
+- The run is finished when the pull request is open and you have
+  commented on the `prd` issue with a link to it and a summary.
+- Then stop. Do not wait for checks, do not merge, and do not close
+  issues: the pull request merges itself, and the issues close after
+  the deploy.
+- If nothing could be built, comment the reason on the `prd` issue
+  and stop.
 ```
 
 ## Facts this plan rests on
@@ -307,19 +315,32 @@ Only facts a remaining step depends on.
 | The code owner rule passes when the PR's author is the code owner | #123, ruleset log result `pass` |
 | Hobby rolls back one deployment only; after a rollback new pushes do not go live until one is promoted | Vercel docs, instant rollback |
 | A cloud run starts in auto mode, which blocks "merging a pull request no human has approved" | Claude Code docs, scheduled tasks and permission modes |
-| Issue events can trigger a task; filters are documented for pull requests only; events above an hourly cap are dropped | Claude Code docs, scheduled tasks, read 2026-11-15 |
+| An issue trigger can filter on Labels and State; the label started a run in 24 seconds | Task `reelbase-factory`, runs of 2026-11-15 for #143 |
+| Events above the task's hourly cap are dropped | Claude Code docs, scheduled tasks, read 2026-11-15 |
+| A triggered run cannot start a skill marked `disable-model-invocation`; it can read and follow the skill's files | First run for #143 stopped; the second built #147 |
+| `smoke` closes a bot-merged PR's issues after the deploy, and opens a `bug` issue on a failure | #143 to #146 after #147; #142 |
 | Cloud runs comment and label as you, through the Claude GitHub App | Issue events on #102, comments on #121 |
 
 Not yet proven:
 
-- The issue trigger can be limited to the `approved` label (Phase 4, first step).
 - A run can see which event started it. The plan does not depend on it.
-- GitHub emails you when `github-actions` opens an issue (Phase 3, check once).
+- What happens when a production build fails: Vercel sends no `success` event, so `smoke` does not
+  run and no `bug` issue opens. The PRD's issues stay open.
 
 ## Backlog
 
 Not in any phase. Nothing here is built unless you pull it into a PRD.
 
+- The cloud session's hook re-prompts the run about unpushed commits while the work branch is
+  local. It costs a few tokens each time.
+- In the cloud, the installed Playwright expects another Chromium build. Tried fix: the environment's
+  setup script runs `pnpm exec playwright install chromium`.
+- In the cloud no TMDB token is set, so agents build a stand-in from fixtures for local E2E. The
+  run for #143 reported that the session's proxy may supply TMDB credentials. Not verified.
+- A ticket can narrow a Behaviour line without saying so: #146 checked one page where the PRD said
+  every page. Fixed in `as-plan` on 2026-11-15; watch the next plan.
+- A review of an E2E-only ticket starts a production server for its mutation test and takes about
+  as long as the build.
 - A one-way PR keeps auto-merge on, so a later green re-run of `door` would merge it.
 - `automerge.yml` may go red on a PR opened as a draft.
 - A parked ticket moves out of its PRD, so the PRD closes and the next one can start.

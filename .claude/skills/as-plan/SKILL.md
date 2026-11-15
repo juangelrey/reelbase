@@ -41,6 +41,8 @@ Task 4: User can delete a note
 
 Each vertical slice delivers working, testable functionality.
 
+Split by behaviour, never by test level: a ticket carries every test of what it builds, end-to-end specs included.
+
 ### Step 4: Write Tasks
 
 Each task becomes one ticket issue with this body:
@@ -59,6 +61,8 @@ Each task becomes one ticket issue with this body:
 - `path/to/file.test`
 ```
 
+The tickets together cover every Behaviour line of the `prd` in full. An acceptance criterion keeps the scope words of the line it comes from: `on any page` does not become `on the home page`.
+
 ### Step 5: Order
 
 Put the tasks most likely to fail early; each task leaves the system in a working state.
@@ -66,6 +70,8 @@ Put the tasks most likely to fail early; each task leaves the system in a workin
 ## Task Sizing
 
 Split a task that touches more than ~5 files, needs more than one session or more than 3 acceptance bullets, spans independent areas, or has "and" in its title.
+
+A plan has at most 4 tickets. A `prd` that needs more is too large for one plan: create no issues, and report that it must be split.
 
 ## Output Issues
 
